@@ -18,7 +18,7 @@ log_error() { echo "[ERROR] $1"; }
 clone_wiki() {
     log_info "Cloning wiki repository..."
     if [ -d "$WIKI_DIR" ]; then
-        if [ ! -d "$WIKI_DIR/.git" ]; then
+        if [ ! -f "$WIKI_DIR/.git/config" ]; then
             log_warning "Wiki directory exists without .git; removing and recloning"
             rm -rf "$WIKI_DIR"
         else

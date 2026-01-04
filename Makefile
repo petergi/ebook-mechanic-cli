@@ -1,7 +1,7 @@
 # Makefile for Go project
 
 # Variables
-BINARY_NAME=ebook-mechanic
+BINARY_NAME=ebm-cli
 GO=go
 GOFLAGS=-v
 GOTEST=$(GO) test

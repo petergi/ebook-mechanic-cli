@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/example/project/pkg/ebmlib"
+	"github.com/petergi/ebook-mechanic-lib/pkg/ebmlib"
 )
 
 func TestNewReportModel(t *testing.T) {

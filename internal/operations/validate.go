@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/example/project/pkg/ebmlib"
+	"github.com/petergi/ebook-mechanic-lib/pkg/ebmlib"
 )
 
 // ValidateOperation handles ebook validation

@@ -3,7 +3,7 @@ import re
 import sys
 
 root = Path('.')
-md_files = list(root.rglob('*.md'))
+md_files = [p for p in root.rglob('*.md') if 'wiki' not in p.parts]
 link_re = re.compile(r'\[[^\]]*\]\(([^)]+)\)')
 
 missing = []

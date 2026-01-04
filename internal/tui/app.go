@@ -6,7 +6,7 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/example/project/pkg/ebmlib"
+	"github.com/petergi/ebook-mechanic-lib/pkg/ebmlib"
 	"github.com/petergi/ebook-mechanic-cli/internal/operations"
 	"github.com/petergi/ebook-mechanic-cli/internal/tui/models"
 )

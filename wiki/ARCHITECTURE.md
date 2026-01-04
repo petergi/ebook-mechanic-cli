@@ -1,3 +1,4 @@
+
 # Architecture
 
 ## Overview
@@ -14,46 +15,48 @@ ebook-mechanic-cli is a Terminal User Interface (TUI) application for validating
 
 ## High-Level Architecture
 
+---
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│                         User                                 │
+│                         User                                │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    TUI Layer (Bubbletea)                     │
-│  ┌────────────┐  ┌────────────┐  ┌───────────┐             │
-│  │    Menu    │  │   Browser  │  │  Progress │             │
-│  │   Model    │  │    Model   │  │   Model   │             │
-│  └────────────┘  └────────────┘  └───────────┘             │
+│                    TUI Layer (Bubbletea)                    │
+│  ┌────────────┐  ┌────────────┐  ┌───────────┐              │
+│  │    Menu    │  │   Browser  │  │  Progress │              │
+│  │   Model    │  │    Model   │  │   Model   │              │
+│  └────────────┘  └────────────┘  └───────────┘              │
 │  ┌────────────┐  ┌────────────┐                             │
 │  │   Report   │  │   Repair   │                             │
 │  │   Model    │  │   Model    │                             │
 │  └────────────┘  └────────────┘                             │
-│                                                               │
+│                                                             │
 │  Styling: Lipgloss (colors, borders, layout)                │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  Operations Layer                            │
+│                  Operations Layer                           │
 │  ┌────────────────────────────────────────────────┐         │
 │  │  Validate  │  Repair  │  Batch  │  Report      │         │
 │  └────────────────────────────────────────────────┘         │
-│                                                               │
-│  - Orchestrates library calls                                │
-│  - Manages concurrent operations                             │
-│  - Handles errors and state                                  │
+│                                                             │
+│  - Orchestrates library calls                               │
+│  - Manages concurrent operations                            │
+│  - Handles errors and state                                 │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              ebook-mechanic-lib (External)                   │
+│              ebook-mechanic-lib (External)                  │
 │  ┌────────────────────────────────────────────────┐         │
 │  │  ValidateEPUB  │  ValidatePDF  │  Repair       │         │
 │  └────────────────────────────────────────────────┘         │
 └─────────────────────────────────────────────────────────────┘
 ```
+---
 
 ## Component Architecture
 
@@ -137,6 +140,7 @@ The operations layer bridges the TUI and the library, providing:
 
 ### Validation Flow
 
+---
 ```text
 User selects file → Browser Model
        ↓
@@ -148,9 +152,11 @@ Progress updates → Progress Model
        ↓
 ValidationReport → Report Model → Styled display
 ```
+---
 
 ### Repair Flow
 
+---
 ```text
 User selects file → Browser Model
        ↓
@@ -164,9 +170,11 @@ User confirms → Apply Repair
        ↓
 RepairResult → Report Model → Success message
 ```
+---
 
 ### Batch Processing Flow
 
+---
 ```text
 User selects directory → Browser Model
        ↓
@@ -178,6 +186,7 @@ For each file: Validate/Repair → Progress updates
        ↓
 Aggregate results → Report Model → Summary display
 ```
+---
 
 ## State Management
 
@@ -193,11 +202,13 @@ The application uses Bubbletea's message-passing architecture:
 
 ### State Transitions
 
+---
 ```text
 Menu → Browser → Menu → Operation → Progress → Report → Menu
   ↑                                                        ↓
   └────────────────────────────────────────────────────────┘
 ```
+---
 
 ## Error Handling
 
@@ -236,6 +247,7 @@ Menu → Browser → Menu → Operation → Progress → Report → Menu
 
 ### Test Organization
 
+---
 ```text
 tests/
 ├── tui/
@@ -249,6 +261,7 @@ tests/
 └── integration/
     └── e2e_test.go         # End-to-end tests
 ```
+---
 
 ## Concurrency Model
 

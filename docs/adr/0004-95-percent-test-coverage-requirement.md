@@ -7,6 +7,7 @@ Accepted
 ## Context
 
 The ebook-mechanic-cli needs to be reliable and maintainable. To ensure quality, we need to establish:
+
 - Minimum acceptable test coverage
 - Types of tests required (unit, integration, e2e)
 - Testing strategy for TUI components
@@ -15,18 +16,22 @@ The ebook-mechanic-cli needs to be reliable and maintainable. To ensure quality,
 ### Considered Alternatives
 
 1. **No Coverage Requirement**
+
    - Pros: Faster initial development
    - Cons: Technical debt, hard to refactor, bugs in production
 
 2. **80% Coverage**
+
    - Pros: Industry standard, achievable
    - Cons: Too low for a CLI tool with critical file operations
 
 3. **95% Coverage**
+
    - Pros: High confidence, forces good design, catches edge cases
    - Cons: More upfront effort, may encourage coverage-chasing
 
 4. **100% Coverage**
+
    - Pros: Complete testing
    - Cons: Unrealistic, diminishing returns, encourages trivial tests
 
@@ -46,12 +51,14 @@ Coverage will be measured using Go's built-in coverage tools and enforced in CI.
 ### Why 95% (not 80% or 100%)
 
 **95% is high enough to**:
+
 - Catch most bugs before they reach users
 - Force thinking about edge cases during development
 - Enable confident refactoring
 - Serve as living documentation
 
 **95% is realistic enough to**:
+
 - Allow for genuinely untestable code (external dependencies)
 - Avoid busywork tests just for coverage
 - Balance development speed with quality
@@ -59,6 +66,7 @@ Coverage will be measured using Go's built-in coverage tools and enforced in CI.
 ### File Operations Criticality
 
 This CLI performs file modifications (repair operations):
+
 - Data loss is unacceptable
 - High test coverage reduces risk
 - Validates backup mechanisms
@@ -67,6 +75,7 @@ This CLI performs file modifications (repair operations):
 ### TUI Testing Challenges
 
 TUI code is often undertested, but with Bubbletea's MVU architecture:
+
 - Models are pure functions (easy to test)
 - Update logic is deterministic
 - Views are just string rendering
@@ -77,6 +86,7 @@ High coverage is achievable and valuable.
 ### Refactoring Confidence
 
 95% coverage enables:
+
 - Safe refactoring of complex operations
 - Architectural changes without fear
 - Performance optimizations with regression protection
@@ -309,6 +319,7 @@ func main() {
 ```
 
 Document why code is excluded:
+
 - External dependencies that can't be mocked
 - Platform-specific code
 - Main entry points
@@ -318,6 +329,7 @@ Document why code is excluded:
 ### Coverage Reports
 
 Generate coverage reports on each CI run:
+
 - HTML report as artifact
 - Coverage badge in README
 - Trend tracking over time
@@ -325,12 +337,14 @@ Generate coverage reports on each CI run:
 ### Coverage by Package
 
 Track coverage per package:
+
 ```bash
 go test -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out
 ```
 
 Expected breakdown:
+
 - `internal/tui/models`: 95%+
 - `internal/operations`: 95%+
 - `pkg/utils`: 98%+ (simpler code)
@@ -341,6 +355,7 @@ Expected breakdown:
 ### Pull Request Requirements
 
 Every PR must:
+
 1. Maintain or improve overall coverage
 2. Include tests for all new code
 3. Include integration test for new features
@@ -349,6 +364,7 @@ Every PR must:
 ### Coverage Checks
 
 Automated checks will:
+
 - Fail PR if coverage drops below 95%
 - Show coverage diff in PR comments
 - Highlight uncovered lines

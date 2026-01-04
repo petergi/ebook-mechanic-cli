@@ -18,18 +18,22 @@ The ebook-mechanic-cli requires a Terminal User Interface (TUI) to provide an in
 ### Considered Alternatives
 
 1. **tview** (rivo/tview)
+
    - Pros: Rich widget library, table/list views
    - Cons: More opinionated, heavier framework, harder to test
 
 2. **termui** (gizak/termui)
+
    - Pros: Dashboard-style layouts, charts
    - Cons: Less active maintenance, focused on dashboards not interactive UIs
 
 3. **Bubbletea** (charmbracelet/bubbletea)
+
    - Pros: Clean MVU architecture, highly testable, active ecosystem, composable
    - Cons: More code for complex widgets (but mitigated by bubbles library)
 
 4. **Custom TUI** with termbox-go
+
    - Pros: Full control, lightweight
    - Cons: Significant development effort, need to handle all edge cases
 
@@ -42,6 +46,7 @@ We will use **Bubbletea** as the TUI framework for ebook-mechanic-cli.
 ### Architecture Alignment
 
 Bubbletea's Model-View-Update (MVU/Elm) architecture provides:
+
 - **Clear separation of concerns**: State, update logic, and rendering are distinct
 - **Testability**: Pure functions for updates and views make testing straightforward
 - **Predictability**: Unidirectional data flow eliminates state synchronization issues
@@ -99,6 +104,7 @@ This aligns with our goal of 95%+ test coverage, as each component can be tested
 ### Model Structure
 
 Each screen/feature will have its own model:
+
 - `menu.go`: Main menu
 - `browser.go`: File browser
 - `progress.go`: Progress indicator
@@ -108,6 +114,7 @@ Each screen/feature will have its own model:
 ### Message Types
 
 Define clear message types for:
+
 - User input (key presses)
 - Navigation events
 - Operation results

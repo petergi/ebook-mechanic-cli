@@ -9,16 +9,19 @@ ebook-mechanic-cli is a CLI tool for ebook processing and management, written in
 ## Development Commands
 
 ### Build
+
 ```bash
 go build -o ebook-mechanic
 ```
 
 ### Run
+
 ```bash
 go run main.go [command] [flags]
 ```
 
 ### Testing
+
 ```bash
 # Run all tests
 go test ./...
@@ -38,6 +41,7 @@ go tool cover -html=coverage.out
 ```
 
 ### Linting
+
 ```bash
 # Install golangci-lint if not already installed
 # go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
@@ -46,6 +50,7 @@ golangci-lint run
 ```
 
 ### Build for Multiple Platforms
+
 ```bash
 # Linux
 GOOS=linux GOARCH=amd64 go build -o ebook-mechanic-linux

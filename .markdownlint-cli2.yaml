@@ -1,0 +1,6 @@
+config:
+  - .markdownlint.yaml
+
+ignores:
+  - .github/prompts/**/*.md
+  - wiki/**/*.md

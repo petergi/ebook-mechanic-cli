@@ -7,6 +7,7 @@ Accepted
 ## Context
 
 The ebook-mechanic-cli TUI needs a robust styling solution for:
+
 - Consistent visual design across all components
 - Semantic coloring (errors=red, warnings=yellow, success=green)
 - Responsive layouts that adapt to terminal size
@@ -16,18 +17,22 @@ The ebook-mechanic-cli TUI needs a robust styling solution for:
 ### Considered Alternatives
 
 1. **ANSI Escape Codes** (manual)
+
    - Pros: No dependencies, full control
    - Cons: Error-prone, hard to maintain, no layout assistance
 
 2. **Lipgloss** (charmbracelet/lipgloss)
+
    - Pros: Declarative styling, layout utilities, responsive, integrates with Bubbletea
    - Cons: Additional dependency
 
 3. **termenv** (muesli/termenv)
+
    - Pros: Cross-platform terminal detection, color adaptation
    - Cons: Lower-level, no layout features (note: Lipgloss uses termenv internally)
 
 4. **Color** (fatih/color)
+
    - Pros: Simple color API
    - Cons: No layout capabilities, less declarative
 
@@ -40,6 +45,7 @@ We will use **Lipgloss** for all terminal styling and layout in ebook-mechanic-c
 ### Declarative Styling
 
 Lipgloss provides a CSS-like API for terminal styling:
+
 ```go
 errorStyle := lipgloss.NewStyle().
     Foreground(lipgloss.Color("9")).
@@ -53,6 +59,7 @@ This is more maintainable and readable than manual ANSI codes.
 ### Layout Capabilities
 
 Lipgloss includes powerful layout primitives:
+
 - **JoinHorizontal/JoinVertical**: Combine elements
 - **Place**: Position elements with alignment
 - **Width/Height**: Responsive sizing
@@ -63,6 +70,7 @@ These are essential for building complex TUI layouts.
 ### Semantic Design System
 
 We can define a complete design system:
+
 ```go
 var (
     ErrorStyle   = baseStyle.Foreground(lipgloss.Color("9"))

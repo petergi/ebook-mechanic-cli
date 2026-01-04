@@ -26,18 +26,22 @@ The ebook-mechanic-cli needs to efficiently process multiple ebook files in batc
 ### Considered Alternatives
 
 1. **Sequential Processing**
+
    - Pros: Simple, predictable
    - Cons: Slow for large batches, doesn't utilize multi-core
 
 2. **Unbounded Concurrency** (goroutine per file)
+
    - Pros: Maximum parallelism
    - Cons: Resource exhaustion, system overload, hard to control
 
 3. **Worker Pool Pattern**
+
    - Pros: Controlled concurrency, predictable resource usage, good throughput
    - Cons: More complex implementation
 
 4. **errgroup Package**
+
    - Pros: Built-in error handling, easy cancellation
    - Cons: Stops on first error (not desired for batch), less control
 
@@ -64,6 +68,7 @@ We will implement a **Worker Pool Pattern** with the following characteristics:
 ### Why Not errgroup
 
 While `errgroup` is excellent for many use cases, it's designed to fail-fast:
+
 - Stops all workers on first error
 - We need to continue processing and collect all results
 - We want fine-grained error collection per file
@@ -71,6 +76,7 @@ While `errgroup` is excellent for many use cases, it's designed to fail-fast:
 ### Why Not Unbounded Goroutines
 
 Creating a goroutine per file:
+
 - Could spawn thousands of goroutines for large batches
 - Each operation involves file I/O (expensive resources)
 - Could exhaust file descriptors, memory, or CPU
@@ -79,6 +85,7 @@ Creating a goroutine per file:
 ### Progress Reporting via Messages
 
 Bubbletea's message-passing architecture:
+
 - Workers send progress messages to UI
 - UI updates asynchronously
 - No blocking or shared state
@@ -348,11 +355,13 @@ func (m batchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 Default: `runtime.NumCPU()`
 
 **Rationale**:
+
 - File validation/repair is CPU-bound (parsing, checksums)
 - I/O is mostly sequential within each operation
 - NumCPU provides good balance
 
 **Tuning**:
+
 - User can override via config
 - May increase for I/O-heavy operations
 - May decrease for resource-constrained systems
@@ -362,6 +371,7 @@ Default: `runtime.NumCPU()`
 Default: 100 tasks
 
 **Rationale**:
+
 - Provides backpressure
 - Prevents memory exhaustion with large batches
 - Small enough to not waste memory
@@ -371,6 +381,7 @@ Default: 100 tasks
 Default: 100ms
 
 **Rationale**:
+
 - Responsive enough for user feedback
 - Not so frequent as to impact performance
 - Bubbletea handles rendering efficiently
@@ -460,6 +471,7 @@ func BenchmarkBatchProcessor_100Files(b *testing.B) {
 ### Debugging
 
 Enable verbose logging:
+
 ```go
 func (bp *BatchProcessor) worker(id int) {
     log.Printf("Worker %d started", id)

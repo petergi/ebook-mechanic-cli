@@ -1,3 +1,4 @@
+
 # Architecture
 
 ## Overview
@@ -14,46 +15,48 @@ ebook-mechanic-cli is a Terminal User Interface (TUI) application for validating
 
 ## High-Level Architecture
 
-```
+---
+```text
 ┌─────────────────────────────────────────────────────────────┐
-│                         User                                 │
+│                         User                                │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    TUI Layer (Bubbletea)                     │
-│  ┌────────────┐  ┌────────────┐  ┌───────────┐             │
-│  │    Menu    │  │   Browser  │  │  Progress │             │
-│  │   Model    │  │    Model   │  │   Model   │             │
-│  └────────────┘  └────────────┘  └───────────┘             │
+│                    TUI Layer (Bubbletea)                    │
+│  ┌────────────┐  ┌────────────┐  ┌───────────┐              │
+│  │    Menu    │  │   Browser  │  │  Progress │              │
+│  │   Model    │  │    Model   │  │   Model   │              │
+│  └────────────┘  └────────────┘  └───────────┘              │
 │  ┌────────────┐  ┌────────────┐                             │
 │  │   Report   │  │   Repair   │                             │
 │  │   Model    │  │   Model    │                             │
 │  └────────────┘  └────────────┘                             │
-│                                                               │
+│                                                             │
 │  Styling: Lipgloss (colors, borders, layout)                │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  Operations Layer                            │
+│                  Operations Layer                           │
 │  ┌────────────────────────────────────────────────┐         │
 │  │  Validate  │  Repair  │  Batch  │  Report      │         │
 │  └────────────────────────────────────────────────┘         │
-│                                                               │
-│  - Orchestrates library calls                                │
-│  - Manages concurrent operations                             │
-│  - Handles errors and state                                  │
+│                                                             │
+│  - Orchestrates library calls                               │
+│  - Manages concurrent operations                            │
+│  - Handles errors and state                                 │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              ebook-mechanic-lib (External)                   │
+│              ebook-mechanic-lib (External)                  │
 │  ┌────────────────────────────────────────────────┐         │
 │  │  ValidateEPUB  │  ValidatePDF  │  Repair       │         │
 │  └────────────────────────────────────────────────┘         │
 └─────────────────────────────────────────────────────────────┘
 ```
+---
 
 ## Component Architecture
 
@@ -72,6 +75,7 @@ Each model represents a distinct screen or interaction mode:
 - **repair.go**: Interactive repair preview with confirmation
 
 **Model Responsibilities**:
+
 - Maintain component state
 - Handle user input (key presses, events)
 - Update state based on messages
@@ -97,18 +101,21 @@ Each model represents a distinct screen or interaction mode:
 The operations layer bridges the TUI and the library, providing:
 
 #### validate.go
+
 - Single file validation
 - Context-aware operation (cancellation support)
 - Progress reporting via channels
 - Error handling and reporting
 
 #### repair.go
+
 - Single file repair
 - Preview generation
 - Interactive confirmation handling
 - Backup management
 
 #### batch.go
+
 - Multi-file processing with worker pools
 - Concurrent validation/repair
 - Progress aggregation
@@ -133,7 +140,8 @@ The operations layer bridges the TUI and the library, providing:
 
 ### Validation Flow
 
-```
+---
+```text
 User selects file → Browser Model
        ↓
 File path → Menu Model → Validate Operation
@@ -144,10 +152,12 @@ Progress updates → Progress Model
        ↓
 ValidationReport → Report Model → Styled display
 ```
+---
 
 ### Repair Flow
 
-```
+---
+```text
 User selects file → Browser Model
        ↓
 File path → Menu Model → Repair Operation
@@ -160,10 +170,12 @@ User confirms → Apply Repair
        ↓
 RepairResult → Report Model → Success message
 ```
+---
 
 ### Batch Processing Flow
 
-```
+---
+```text
 User selects directory → Browser Model
        ↓
 Directory path → Menu Model → Batch Operation
@@ -174,6 +186,7 @@ For each file: Validate/Repair → Progress updates
        ↓
 Aggregate results → Report Model → Summary display
 ```
+---
 
 ## State Management
 
@@ -189,11 +202,13 @@ The application uses Bubbletea's message-passing architecture:
 
 ### State Transitions
 
-```
+---
+```text
 Menu → Browser → Menu → Operation → Progress → Report → Menu
   ↑                                                        ↓
   └────────────────────────────────────────────────────────┘
 ```
+---
 
 ## Error Handling
 
@@ -232,7 +247,8 @@ Menu → Browser → Menu → Operation → Progress → Report → Menu
 
 ### Test Organization
 
-```
+---
+```text
 tests/
 ├── tui/
 │   ├── models_test.go      # Model unit tests
@@ -245,6 +261,7 @@ tests/
 └── integration/
     └── e2e_test.go         # End-to-end tests
 ```
+---
 
 ## Concurrency Model
 

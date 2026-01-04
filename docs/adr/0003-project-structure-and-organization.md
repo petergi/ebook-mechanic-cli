@@ -7,6 +7,7 @@ Accepted
 ## Context
 
 The ebook-mechanic-cli codebase needs a clear organizational structure that:
+
 - Separates concerns between UI, business logic, and utilities
 - Supports high test coverage (95%+)
 - Makes the codebase easy to navigate and maintain
@@ -16,18 +17,22 @@ The ebook-mechanic-cli codebase needs a clear organizational structure that:
 ### Considered Alternatives
 
 1. **Flat Structure**: All code in root with minimal organization
+
    - Pros: Simple, no import paths
    - Cons: Poor organization, hard to maintain as project grows
 
 2. **Feature-Based Structure**: Organize by feature (validate/, repair/, batch/)
+
    - Pros: Related code together
    - Cons: Circular dependencies, harder to test layers independently
 
 3. **Layer-Based Structure**: Organize by technical layer (ui/, operations/, utils/)
+
    - Pros: Clear separation, testable layers, scalable
    - Cons: More directories, slightly longer import paths
 
 4. **Hexagonal/Clean Architecture**: Strict ports/adapters separation
+
    - Pros: Very clean separation, highly testable
    - Cons: Overkill for CLI tool, too much indirection
 
@@ -35,7 +40,7 @@ The ebook-mechanic-cli codebase needs a clear organizational structure that:
 
 We will use a **layer-based structure with internal packages** following Go best practices:
 
-```
+```text
 ebook-mechanic-cli/
 ├── cmd/
 │   └── ebm/
@@ -65,6 +70,7 @@ Three distinct layers with clear responsibilities:
 3. **Utilities** (`pkg/utils/`): Reusable helpers (exported as they may be useful externally)
 
 This separation ensures:
+
 - UI can be tested independently of operations
 - Operations can be used from different UIs (future: web, API)
 - Utilities can be easily unit tested
@@ -72,6 +78,7 @@ This separation ensures:
 ### Internal Package Pattern
 
 Using `internal/` follows Go best practices:
+
 - Prevents external packages from importing internal code
 - Signals these are implementation details
 - Provides encapsulation without sacrificing organization
@@ -79,6 +86,7 @@ Using `internal/` follows Go best practices:
 ### cmd/ for Entry Points
 
 Standard Go convention:
+
 - `cmd/ebm/main.go` is the CLI entry point
 - Keeps main package small (just wiring)
 - Allows for future additional commands if needed
@@ -127,7 +135,7 @@ Standard Go convention:
 
 ### Detailed Structure
 
-```
+```text
 ebook-mechanic-cli/
 │
 ├── cmd/
@@ -185,7 +193,7 @@ ebook-mechanic-cli/
 
 ### Package Dependencies
 
-```
+```text
 cmd/ebm
   └─> internal/tui/app
         ├─> internal/tui/models/*
@@ -196,6 +204,7 @@ cmd/ebm
 ```
 
 **Rules**:
+
 - TUI models should NOT import operations directly
 - Operations should NOT import TUI code
 - Utils should NOT import anything internal
@@ -211,6 +220,7 @@ cmd/ebm
 ### Import Organization
 
 Standard Go import grouping:
+
 ```go
 import (
     // Standard library
@@ -227,7 +237,7 @@ import (
     "github.com/petergi/ebook-mechanic-cli/internal/tui/styles"
 
     // Library integration
-    "github.com/example/project/pkg/ebmlib"
+    "github.com/petergi/ebook-mechanic-lib/pkg/ebmlib"
 )
 ```
 
@@ -236,7 +246,8 @@ import (
 ### Unit Tests
 
 Located alongside source files:
-```
+
+```text
 internal/tui/models/menu.go
 internal/tui/models/menu_test.go
 ```
@@ -244,7 +255,8 @@ internal/tui/models/menu_test.go
 ### Integration Tests
 
 In `tests/` directory:
-```
+
+```text
 tests/integration/validation_flow_test.go
 tests/integration/repair_flow_test.go
 tests/integration/batch_processing_test.go
@@ -253,7 +265,8 @@ tests/integration/batch_processing_test.go
 ### Test Fixtures
 
 Organized by test type:
-```
+
+```text
 tests/tui/golden/           # Expected output snapshots
 tests/tui/fixtures/         # Test data
 tests/operations/fixtures/  # Sample EPUB/PDF files
@@ -262,6 +275,7 @@ tests/operations/fixtures/  # Sample EPUB/PDF files
 ## Migration Path
 
 If structure needs to change:
+
 1. Document reason in new ADR
 2. Use Go module replace directives during transition
 3. Update imports in phases

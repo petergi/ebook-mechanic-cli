@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/example/project/pkg/ebmlib"
+	"github.com/petergi/ebook-mechanic-lib/pkg/ebmlib"
 )
 
 func TestNewRepairOperation(t *testing.T) {
