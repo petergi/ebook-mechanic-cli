@@ -16,6 +16,7 @@ ebook-mechanic-cli is a Terminal User Interface (TUI) application for validating
 ## High-Level Architecture
 
 ---
+
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │                         User                                │
@@ -56,6 +57,7 @@ ebook-mechanic-cli is a Terminal User Interface (TUI) application for validating
 │  └────────────────────────────────────────────────┘         │
 └─────────────────────────────────────────────────────────────┘
 ```
+
 ---
 
 ## Component Architecture
@@ -141,6 +143,7 @@ The operations layer bridges the TUI and the library, providing:
 ### Validation Flow
 
 ---
+
 ```text
 User selects file → Browser Model
        ↓
@@ -152,11 +155,13 @@ Progress updates → Progress Model
        ↓
 ValidationReport → Report Model → Styled display
 ```
+
 ---
 
 ### Repair Flow
 
 ---
+
 ```text
 User selects file → Browser Model
        ↓
@@ -170,11 +175,13 @@ User confirms → Apply Repair
        ↓
 RepairResult → Report Model → Success message
 ```
+
 ---
 
 ### Batch Processing Flow
 
 ---
+
 ```text
 User selects directory → Browser Model
        ↓
@@ -186,6 +193,7 @@ For each file: Validate/Repair → Progress updates
        ↓
 Aggregate results → Report Model → Summary display
 ```
+
 ---
 
 ## State Management
@@ -203,11 +211,13 @@ The application uses Bubbletea's message-passing architecture:
 ### State Transitions
 
 ---
+
 ```text
 Menu → Browser → Menu → Operation → Progress → Report → Menu
   ↑                                                        ↓
   └────────────────────────────────────────────────────────┘
 ```
+
 ---
 
 ## Error Handling
@@ -248,6 +258,7 @@ Menu → Browser → Menu → Operation → Progress → Report → Menu
 ### Test Organization
 
 ---
+
 ```text
 tests/
 ├── tui/
@@ -261,6 +272,7 @@ tests/
 └── integration/
     └── e2e_test.go         # End-to-end tests
 ```
+
 ---
 
 ## Concurrency Model
