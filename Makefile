@@ -150,7 +150,7 @@ docs-lint: ## Lint markdown files (requires markdownlint-cli2)
 docs-spell: ## Spellcheck docs (requires codespell)
 	@echo "$(BOLD)$(BLUE)Spellchecking docs...$(RESET)"
 	@if command -v codespell > /dev/null 2>&1; then \
-		codespell --config .codespellrc .; \
+		codespell --check-filenames --check-hidden --config .codespellrc .; \
 		printf "%b\n" "$(BOLD)$(GREEN)✓ Spellcheck complete$(RESET)"; \
 	else \
 		printf "%b\n" "$(BOLD)$(YELLOW)! codespell not installed. Install with: pip install codespell$(RESET)"; \
