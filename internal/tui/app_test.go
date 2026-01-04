@@ -70,19 +70,19 @@ func TestAppView_AllStates(t *testing.T) {
 	}
 
 	tempDir := t.TempDir()
-	app.browserModel = models.NewBrowserModel(tempDir)
+	app.browserModel = models.NewBrowserModel(tempDir, 80, 24)
 	app.state = StateBrowser
 	if !strings.Contains(app.View(), "File Browser") {
 		t.Error("expected browser view to include title")
 	}
 
-	app.progressModel = models.NewProgressModel("Validating", "file.epub", 1)
+	app.progressModel = models.NewProgressModel("Validating", "file.epub", 1, 80, 24)
 	app.state = StateProgress
 	if !strings.Contains(app.View(), "Validating") {
 		t.Error("expected progress view to include operation name")
 	}
 
-	app.reportModel = models.NewReportModel(&ebmlib.ValidationReport{FilePath: "file.epub"})
+	app.reportModel = models.NewReportModel(&ebmlib.ValidationReport{FilePath: "file.epub"}, 80, 24)
 	app.state = StateReport
 	if !strings.Contains(app.View(), "Validation Report") {
 		t.Error("expected report view to include title")
@@ -159,7 +159,7 @@ func TestAppUpdateBrowser_BackToMenu(t *testing.T) {
 func TestAppUpdateBrowser_DelegatesToBrowserModel(t *testing.T) {
 	app := NewApp()
 	app.state = StateBrowser
-	app.browserModel = models.NewBrowserModel(t.TempDir())
+	app.browserModel = models.NewBrowserModel(t.TempDir(), 80, 24)
 
 	model, cmd := app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	updated := model.(App)
@@ -342,7 +342,7 @@ func TestAppUpdateProgress_BackToMenu(t *testing.T) {
 func TestAppUpdateProgress_DelegatesToProgressModel(t *testing.T) {
 	app := NewApp()
 	app.state = StateProgress
-	app.progressModel = models.NewProgressModel("Validating", "file.epub", 1)
+	app.progressModel = models.NewProgressModel("Validating", "file.epub", 1, 80, 24)
 
 	model, cmd := app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	updated := model.(App)
@@ -359,7 +359,7 @@ func TestAppUpdateProgress_DelegatesToProgressModel(t *testing.T) {
 func TestAppUpdateReport_BackToMenu(t *testing.T) {
 	app := NewApp()
 	app.state = StateReport
-	app.reportModel = models.NewReportModel(&ebmlib.ValidationReport{FilePath: "book.epub"})
+	app.reportModel = models.NewReportModel(&ebmlib.ValidationReport{FilePath: "book.epub"}, 80, 24)
 
 	model, _ := app.Update(models.BackToMenuMsg{})
 	updated := model.(App)
@@ -372,7 +372,7 @@ func TestAppUpdateReport_BackToMenu(t *testing.T) {
 func TestAppUpdateReport_DelegatesToReportModel(t *testing.T) {
 	app := NewApp()
 	app.state = StateReport
-	app.reportModel = models.NewReportModel(&ebmlib.ValidationReport{FilePath: "book.epub"})
+	app.reportModel = models.NewReportModel(&ebmlib.ValidationReport{FilePath: "book.epub"}, 80, 24)
 
 	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
 	updated := model.(App)

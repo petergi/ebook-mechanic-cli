@@ -10,7 +10,7 @@ import (
 
 func TestNewBrowserModel(t *testing.T) {
 	tmpDir := t.TempDir()
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 
 	if m.currentDir != tmpDir {
 		t.Errorf("Expected currentDir to be %s, got %s", tmpDir, m.currentDir)
@@ -30,7 +30,7 @@ func TestNewBrowserModel(t *testing.T) {
 }
 
 func TestNewBrowserModel_EmptyPath(t *testing.T) {
-	m := NewBrowserModel("")
+	m := NewBrowserModel("", 80, 24)
 
 	// Should default to current working directory
 	cwd, _ := os.Getwd()
@@ -41,7 +41,7 @@ func TestNewBrowserModel_EmptyPath(t *testing.T) {
 
 func TestBrowserModel_Update_NavigateDown(t *testing.T) {
 	tmpDir := createTestDirectory(t)
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 
 	if len(m.items) < 2 {
 		t.Skip("Need at least 2 items for this test")
@@ -57,7 +57,7 @@ func TestBrowserModel_Update_NavigateDown(t *testing.T) {
 
 func TestBrowserModel_Update_NavigateUp(t *testing.T) {
 	tmpDir := createTestDirectory(t)
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 	m.selected = 1
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
@@ -70,7 +70,7 @@ func TestBrowserModel_Update_NavigateUp(t *testing.T) {
 
 func TestBrowserModel_Update_WrappingDown(t *testing.T) {
 	tmpDir := createTestDirectory(t)
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 
 	if len(m.items) == 0 {
 		t.Skip("Need items for this test")
@@ -88,7 +88,7 @@ func TestBrowserModel_Update_WrappingDown(t *testing.T) {
 
 func TestBrowserModel_Update_WrappingUp(t *testing.T) {
 	tmpDir := createTestDirectory(t)
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 
 	if len(m.items) == 0 {
 		t.Skip("Need items for this test")
@@ -119,7 +119,7 @@ func TestBrowserModel_Update_VimKeys(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := NewBrowserModel(tmpDir)
+			m := NewBrowserModel(tmpDir, 80, 24)
 			if len(m.items) < 2 {
 				t.Skip("Need at least 2 items")
 			}
@@ -143,7 +143,7 @@ func TestBrowserModel_Update_EnterDirectory(t *testing.T) {
 		t.Fatalf("Failed to create subdir: %v", err)
 	}
 
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 	m.loadDirectory()
 
 	// Find the subdirectory in items
@@ -175,7 +175,7 @@ func TestBrowserModel_Update_BatchEnterDirectory(t *testing.T) {
 		t.Fatalf("Failed to create subdir: %v", err)
 	}
 
-	m := NewBatchBrowserModel(tmpDir)
+	m := NewBatchBrowserModel(tmpDir, 80, 24)
 	m.loadDirectory()
 
 	dirIndex := -1
@@ -215,7 +215,7 @@ func TestBrowserModel_Update_BatchOpenDirectory(t *testing.T) {
 		t.Fatalf("Failed to create subdir: %v", err)
 	}
 
-	m := NewBatchBrowserModel(tmpDir)
+	m := NewBatchBrowserModel(tmpDir, 80, 24)
 	m.loadDirectory()
 
 	dirIndex := -1
@@ -246,7 +246,7 @@ func TestBrowserModel_Update_SelectFile(t *testing.T) {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 	m.loadDirectory()
 
 	// Find the file in items
@@ -287,7 +287,7 @@ func TestBrowserModel_Update_BackspaceToParent(t *testing.T) {
 		t.Fatalf("Failed to create subdir: %v", err)
 	}
 
-	m := NewBrowserModel(subDir)
+	m := NewBrowserModel(subDir, 80, 24)
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	m = updatedModel.(BrowserModel)
@@ -304,7 +304,7 @@ func TestBrowserModel_Update_HKeyToParent(t *testing.T) {
 		t.Fatalf("Failed to create subdir: %v", err)
 	}
 
-	m := NewBrowserModel(subDir)
+	m := NewBrowserModel(subDir, 80, 24)
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
 	m = updatedModel.(BrowserModel)
@@ -316,7 +316,7 @@ func TestBrowserModel_Update_HKeyToParent(t *testing.T) {
 
 func TestBrowserModel_Update_ToggleHidden(t *testing.T) {
 	tmpDir := createTestDirectory(t)
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 
 	initialShowHidden := m.showHidden
 
@@ -330,7 +330,7 @@ func TestBrowserModel_Update_ToggleHidden(t *testing.T) {
 
 func TestBrowserModel_Update_BackToMenu(t *testing.T) {
 	tmpDir := createTestDirectory(t)
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 
@@ -347,7 +347,7 @@ func TestBrowserModel_Update_BackToMenu(t *testing.T) {
 
 func TestBrowserModel_Update_QuitKey(t *testing.T) {
 	tmpDir := createTestDirectory(t)
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 
@@ -364,7 +364,7 @@ func TestBrowserModel_Update_QuitKey(t *testing.T) {
 
 func TestBrowserModel_Update_CtrlC(t *testing.T) {
 	tmpDir := createTestDirectory(t)
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 
@@ -376,7 +376,7 @@ func TestBrowserModel_Update_CtrlC(t *testing.T) {
 
 func TestBrowserModel_Update_WindowSize(t *testing.T) {
 	tmpDir := createTestDirectory(t)
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 
 	updatedModel, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = updatedModel.(BrowserModel)
@@ -389,7 +389,7 @@ func TestBrowserModel_Update_WindowSize(t *testing.T) {
 		t.Errorf("Expected height to be 40, got %d", m.height)
 	}
 
-	expectedViewportSize := 40 - 10
+	expectedViewportSize := 40 - 15
 	if m.viewportSize != expectedViewportSize {
 		t.Errorf("Expected viewportSize to be %d, got %d", expectedViewportSize, m.viewportSize)
 	}
@@ -402,7 +402,7 @@ func TestBrowserModel_SelectedPath(t *testing.T) {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 	m.loadDirectory()
 
 	// Find the file
@@ -428,7 +428,7 @@ func TestBrowserModel_SelectedPath(t *testing.T) {
 
 func TestBrowserModel_SelectedPath_OutOfBounds(t *testing.T) {
 	tmpDir := createTestDirectory(t)
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 
 	m.selected = -1
 	path := m.SelectedPath()
@@ -444,7 +444,7 @@ func TestBrowserModel_SelectedPath_OutOfBounds(t *testing.T) {
 }
 
 func TestBrowserModel_matchesFilter(t *testing.T) {
-	m := NewBrowserModel("")
+	m := NewBrowserModel("", 80, 24)
 
 	tests := []struct {
 		filename string
@@ -470,7 +470,7 @@ func TestBrowserModel_matchesFilter(t *testing.T) {
 }
 
 func TestBrowserModel_matchesFilter_NoFilter(t *testing.T) {
-	m := NewBrowserModel("")
+	m := NewBrowserModel("", 80, 24)
 	m.filterExts = []string{} // No filter
 
 	if !m.matchesFilter("anything.txt") {
@@ -498,7 +498,7 @@ func TestBrowserModel_loadDirectory(t *testing.T) {
 		t.Fatalf("Failed to create subdir: %v", err)
 	}
 
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 	m.loadDirectory()
 
 	// Should have: test.epub, test.pdf, subdir (test.txt filtered out, .hidden.epub hidden)
@@ -516,7 +516,7 @@ func TestBrowserModel_loadDirectory_ShowHidden(t *testing.T) {
 		t.Fatalf("Failed to write visible.epub: %v", err)
 	}
 
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 	m.showHidden = true
 	m.loadDirectory()
 
@@ -536,7 +536,7 @@ func TestBrowserModel_loadDirectory_ShowHidden(t *testing.T) {
 
 func TestBrowserModel_updateViewport(t *testing.T) {
 	tmpDir := createTestDirectory(t)
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 	m.viewportSize = 5
 
 	// Create enough items
@@ -567,7 +567,7 @@ func TestBrowserModel_updateViewport(t *testing.T) {
 
 func TestBrowserModel_View(t *testing.T) {
 	tmpDir := createTestDirectory(t)
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 
 	view := m.View()
 
@@ -578,7 +578,7 @@ func TestBrowserModel_View(t *testing.T) {
 
 func TestBrowserModel_Init(t *testing.T) {
 	tmpDir := createTestDirectory(t)
-	m := NewBrowserModel(tmpDir)
+	m := NewBrowserModel(tmpDir, 80, 24)
 
 	cmd := m.Init()
 

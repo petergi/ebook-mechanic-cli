@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/petergi/ebook-mechanic-lib/pkg/ebmlib"
 	"github.com/petergi/ebook-mechanic-cli/internal/tui/styles"
+	"github.com/petergi/ebook-mechanic-lib/pkg/ebmlib"
 )
 
 // ReportModel displays validation or repair results
@@ -26,13 +26,20 @@ type ReportModel struct {
 }
 
 // NewReportModel creates a new report model for validation results
-func NewReportModel(report *ebmlib.ValidationReport) ReportModel {
+func NewReportModel(report *ebmlib.ValidationReport, width, height int) ReportModel {
+	if width == 0 {
+		width = 80
+	}
+	if height == 0 {
+		height = 24
+	}
+
 	return ReportModel{
 		report:       report,
 		reportType:   "validation",
-		width:        80,
-		height:       24,
-		viewportSize: 15,
+		width:        width,
+		height:       height,
+		viewportSize: height - 12,
 		showErrors:   true,
 		showWarnings: true,
 		showInfo:     true,
@@ -40,13 +47,20 @@ func NewReportModel(report *ebmlib.ValidationReport) ReportModel {
 }
 
 // NewRepairReportModel creates a new report model for repair results
-func NewRepairReportModel(result *ebmlib.RepairResult) ReportModel {
+func NewRepairReportModel(result *ebmlib.RepairResult, width, height int) ReportModel {
+	if width == 0 {
+		width = 80
+	}
+	if height == 0 {
+		height = 24
+	}
+
 	return ReportModel{
 		repairResult: result,
 		reportType:   "repair",
-		width:        80,
-		height:       24,
-		viewportSize: 15,
+		width:        width,
+		height:       height,
+		viewportSize: height - 12,
 		showErrors:   true,
 		showWarnings: true,
 		showInfo:     true,
@@ -136,53 +150,88 @@ func (m ReportModel) renderValidationReport() string {
 
 	// Title
 	title := styles.RenderTitle("📊 Validation Report")
-	filePath := styles.MutedStyle.Render(m.report.FilePath)
 
-	// Overall status
-	var statusDisplay string
+	// File path in subtle header
+	pathBox := lipgloss.NewStyle().
+		Foreground(styles.ColorMuted).
+		Border(lipgloss.NormalBorder(), false, false, true, false).
+		BorderForeground(styles.ColorMuted).
+		Padding(0, 1).
+		Width(m.width - 8).
+		Render(m.report.FilePath)
+
+	// Overall status in highlighted box
+	var statusText string
+	var statusColor lipgloss.AdaptiveColor
 	if m.report.IsValid {
-		statusDisplay = styles.RenderSuccess("✓ File is valid!")
+		statusText = styles.IconCheck + "  File is valid!"
+		statusColor = styles.ColorSuccess
 	} else {
-		statusDisplay = styles.RenderError("✗ File has errors")
+		statusText = styles.IconCross + "  File has errors"
+		statusColor = styles.ColorError
 	}
 
-	// Summary
-	summary := m.renderSummary()
+	statusBox := lipgloss.NewStyle().
+		Foreground(statusColor).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(statusColor).
+		Padding(1, 2).
+		Width(m.width - 8).
+		Render(statusText)
 
-	// Issues list
-	issues := m.renderIssues()
+	// Summary table in bordered box
+	summaryContent := m.renderSummary()
+	summaryBox := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(styles.ColorPrimary).
+		Padding(1, 2).
+		Width(m.width - 8).
+		Render(summaryContent)
 
 	// Filter tabs
 	filters := m.renderFilters()
 
+	// Issues list in bordered scrollable box
+	issuesContent := m.renderIssues()
+	issuesBox := styles.BorderStyle.
+		Width(m.width - 8).
+		Height(m.viewportSize + 2).
+		Render(issuesContent)
+
 	// Help text
-	help := styles.HelpStyle.Render(
-		styles.RenderKeyBinding("1-4", "filter") + "  " +
-			styles.RenderKeyBinding("↑/↓", "scroll") + "  " +
-			styles.RenderKeyBinding("enter", "continue"),
-	)
+	helpBox := lipgloss.NewStyle().
+		Foreground(styles.ColorMuted).
+		Border(lipgloss.NormalBorder(), true, false, false, false).
+		BorderForeground(styles.ColorMuted).
+		Padding(1, 2).
+		Width(m.width - 8).
+		Render(
+			styles.RenderKeyBinding("1-4", "filter") + "  " +
+				styles.RenderKeyBinding("↑/↓", "scroll") + "  " +
+				styles.RenderKeyBinding("enter", "continue"),
+		)
 
 	// Combine all parts
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		title,
-		filePath,
+		pathBox,
 		"",
-		statusDisplay,
+		statusBox,
 		"",
-		summary,
-		"",
+		summaryBox,
 		filters,
-		"",
-		issues,
-		"",
-		help,
+		issuesBox,
+		helpBox,
 	)
 
-	return styles.DocStyle.
-		Width(m.width).
-		Height(m.height).
-		Render(content)
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Top,
+		content,
+	)
 }
 
 // renderRepairReport renders a repair result report
@@ -193,47 +242,80 @@ func (m ReportModel) renderRepairReport() string {
 
 	title := styles.RenderTitle("🔧 Repair Report")
 
-	var statusDisplay string
+	// Status in highlighted box
+	var statusText string
+	var statusColor lipgloss.AdaptiveColor
 	if m.repairResult.Success {
-		statusDisplay = styles.RenderSuccess("✓ Repair successful!")
+		statusText = styles.IconCheck + "  Repair successful!"
+		statusColor = styles.ColorSuccess
 		if m.repairResult.BackupPath != "" {
-			statusDisplay += "\n" + styles.MutedStyle.Render("Backup: "+m.repairResult.BackupPath)
+			statusText += "\n\n" + "Backup created at:\n" + m.repairResult.BackupPath
 		}
 	} else {
-		statusDisplay = styles.RenderError("✗ Repair failed")
+		statusText = styles.IconCross + "  Repair failed"
+		statusColor = styles.ColorError
 		if m.repairResult.Error != nil {
-			statusDisplay += "\n" + styles.ErrorStyle.Render(m.repairResult.Error.Error())
+			statusText += "\n\n" + m.repairResult.Error.Error()
 		}
 	}
 
-	// Actions applied
-	var actionsDisplay string
+	statusBox := lipgloss.NewStyle().
+		Foreground(statusColor).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(statusColor).
+		Padding(1, 2).
+		Width(m.width - 8).
+		Render(statusText)
+
+	// Actions applied in a bordered box
+	var actionsBox string
 	if len(m.repairResult.ActionsApplied) > 0 {
-		actionsDisplay = styles.SubtitleStyle.Render("Actions Applied:")
+		var actionsList string
 		for _, action := range m.repairResult.ActionsApplied {
-			actionsDisplay += "\n" + styles.ListItemStyle.Render(styles.IconCheck+" "+action.Description)
+			actionsList += styles.IconCheck + " " + action.Description + "\n"
 		}
+
+		actionsBox = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(styles.ColorPrimary).
+			Padding(1, 2).
+			Width(m.width - 8).
+			Render(
+				lipgloss.JoinVertical(
+					lipgloss.Left,
+					styles.SubtitleStyle.Render("Actions Applied:"),
+					"",
+					actionsList,
+				),
+			)
 	}
 
-	help := styles.HelpStyle.Render(
-		styles.RenderKeyBinding("enter", "continue"),
-	)
+	// Help text
+	helpBox := lipgloss.NewStyle().
+		Foreground(styles.ColorMuted).
+		Border(lipgloss.NormalBorder(), true, false, false, false).
+		BorderForeground(styles.ColorMuted).
+		Padding(1, 2).
+		Width(m.width - 8).
+		Render(styles.RenderKeyBinding("enter", "continue"))
 
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		title,
-		"",
-		statusDisplay,
-		"",
-		actionsDisplay,
-		"",
-		help,
-	)
+	// Combine all parts
+	var parts []string
+	parts = append(parts, title, statusBox)
+	if actionsBox != "" {
+		parts = append(parts, "", actionsBox)
+	}
+	parts = append(parts, helpBox)
 
-	return styles.DocStyle.
-		Width(m.width).
-		Height(m.height).
-		Render(content)
+	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
+
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		content,
+	)
 }
 
 // renderSummary renders the issue summary

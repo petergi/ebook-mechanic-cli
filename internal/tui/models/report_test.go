@@ -14,7 +14,7 @@ func TestNewReportModel(t *testing.T) {
 		IsValid:  true,
 	}
 
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 
 	if m.report != report {
 		t.Error("Expected report to be set")
@@ -32,8 +32,9 @@ func TestNewReportModel(t *testing.T) {
 		t.Errorf("Expected default height 24, got %d", m.height)
 	}
 
-	if m.viewportSize != 15 {
-		t.Errorf("Expected viewportSize 15, got %d", m.viewportSize)
+	expectedViewportSize := 24 - 12 // height - 12
+	if m.viewportSize != expectedViewportSize {
+		t.Errorf("Expected viewportSize %d, got %d", expectedViewportSize, m.viewportSize)
 	}
 
 	if !m.showErrors || !m.showWarnings || !m.showInfo {
@@ -50,7 +51,7 @@ func TestNewRepairReportModel(t *testing.T) {
 		Success: true,
 	}
 
-	m := NewRepairReportModel(result)
+	m := NewRepairReportModel(result, 80, 24)
 
 	if m.repairResult != result {
 		t.Error("Expected repairResult to be set")
@@ -75,7 +76,7 @@ func TestNewRepairReportModel(t *testing.T) {
 
 func TestReportModel_Init(t *testing.T) {
 	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 
 	cmd := m.Init()
 
@@ -86,7 +87,7 @@ func TestReportModel_Init(t *testing.T) {
 
 func TestReportModel_Update_WindowSize(t *testing.T) {
 	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 
 	updatedModel, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = updatedModel.(ReportModel)
@@ -107,7 +108,7 @@ func TestReportModel_Update_WindowSize(t *testing.T) {
 
 func TestReportModel_Update_NavigateDown(t *testing.T) {
 	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 	m.viewportTop = 0
 
 	tests := []struct {
@@ -133,7 +134,7 @@ func TestReportModel_Update_NavigateDown(t *testing.T) {
 
 func TestReportModel_Update_NavigateUp(t *testing.T) {
 	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 	m.viewportTop = 5
 
 	tests := []struct {
@@ -159,7 +160,7 @@ func TestReportModel_Update_NavigateUp(t *testing.T) {
 
 func TestReportModel_Update_NavigateUp_AtTop(t *testing.T) {
 	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 	m.viewportTop = 0
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
@@ -173,7 +174,7 @@ func TestReportModel_Update_NavigateUp_AtTop(t *testing.T) {
 
 func TestReportModel_Update_Filter_All(t *testing.T) {
 	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 	m.viewportTop = 10
 	m.showErrors = false
 	m.showWarnings = false
@@ -197,7 +198,7 @@ func TestReportModel_Update_Filter_All(t *testing.T) {
 
 func TestReportModel_Update_Filter_Errors(t *testing.T) {
 	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 	m.viewportTop = 10
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
@@ -222,7 +223,7 @@ func TestReportModel_Update_Filter_Errors(t *testing.T) {
 
 func TestReportModel_Update_Filter_Warnings(t *testing.T) {
 	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}})
 	m = updatedModel.(ReportModel)
@@ -242,7 +243,7 @@ func TestReportModel_Update_Filter_Warnings(t *testing.T) {
 
 func TestReportModel_Update_Filter_Info(t *testing.T) {
 	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'4'}})
 	m = updatedModel.(ReportModel)
@@ -262,7 +263,7 @@ func TestReportModel_Update_Filter_Info(t *testing.T) {
 
 func TestReportModel_Update_BackToMenu(t *testing.T) {
 	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 
 	tests := []struct {
 		name string
@@ -290,7 +291,7 @@ func TestReportModel_Update_BackToMenu(t *testing.T) {
 
 func TestReportModel_Update_Quit(t *testing.T) {
 	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 
 	tests := []struct {
 		name string
@@ -320,7 +321,7 @@ func TestReportModel_View_Validation(t *testing.T) {
 		Info:     []ebmlib.ValidationError{},
 	}
 
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 
 	view := m.View()
 
@@ -344,7 +345,7 @@ func TestReportModel_View_ValidationWithErrors(t *testing.T) {
 		Info:     []ebmlib.ValidationError{},
 	}
 
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 
 	view := m.View()
 
@@ -358,7 +359,7 @@ func TestReportModel_View_Repair(t *testing.T) {
 		Success: true,
 	}
 
-	m := NewRepairReportModel(result)
+	m := NewRepairReportModel(result, 80, 24)
 
 	view := m.View()
 
@@ -373,7 +374,7 @@ func TestReportModel_View_RepairWithBackup(t *testing.T) {
 		BackupPath: "/path/to/backup.epub",
 	}
 
-	m := NewRepairReportModel(result)
+	m := NewRepairReportModel(result, 80, 24)
 
 	view := m.View()
 
@@ -388,7 +389,7 @@ func TestReportModel_View_RepairFailed(t *testing.T) {
 		Error:   errors.New("test repair error"),
 	}
 
-	m := NewRepairReportModel(result)
+	m := NewRepairReportModel(result, 80, 24)
 
 	view := m.View()
 
@@ -412,7 +413,7 @@ func TestReportModel_View_RepairWithActions(t *testing.T) {
 		},
 	}
 
-	m := NewRepairReportModel(result)
+	m := NewRepairReportModel(result, 80, 24)
 
 	view := m.View()
 
@@ -449,7 +450,7 @@ func TestReportModel_View_NullRepairResult(t *testing.T) {
 
 func TestReportModel_formatIssue_Error(t *testing.T) {
 	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 
 	issue := ebmlib.ValidationError{
 		Code:     "TEST_ERROR",
@@ -466,7 +467,7 @@ func TestReportModel_formatIssue_Error(t *testing.T) {
 
 func TestReportModel_formatIssue_Warning(t *testing.T) {
 	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 
 	issue := ebmlib.ValidationError{
 		Code:     "TEST_WARNING",
@@ -483,7 +484,7 @@ func TestReportModel_formatIssue_Warning(t *testing.T) {
 
 func TestReportModel_formatIssue_Info(t *testing.T) {
 	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 
 	issue := ebmlib.ValidationError{
 		Code:     "TEST_INFO",
@@ -500,7 +501,7 @@ func TestReportModel_formatIssue_Info(t *testing.T) {
 
 func TestReportModel_formatIssue_WithLocation(t *testing.T) {
 	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 
 	issue := ebmlib.ValidationError{
 		Code:     "TEST_ERROR",
@@ -536,7 +537,7 @@ func TestReportModel_ViewportScrolling(t *testing.T) {
 		Errors:   errors,
 	}
 
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 	m.viewportSize = 10
 
 	// Test scrolling down
@@ -562,7 +563,7 @@ func TestReportModel_ViewportScrolling(t *testing.T) {
 
 func TestReportModel_FilterChangeResetsScroll(t *testing.T) {
 	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 	m.viewportTop = 10
 
 	// Change to errors filter
@@ -593,7 +594,7 @@ func TestReportModel_EmptyReportDisplay(t *testing.T) {
 		Info:     []ebmlib.ValidationError{},
 	}
 
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 
 	view := m.View()
 
@@ -617,7 +618,7 @@ func TestReportModel_MultipleIssueTypes(t *testing.T) {
 		},
 	}
 
-	m := NewReportModel(report)
+	m := NewReportModel(report, 80, 24)
 
 	view := m.View()
 

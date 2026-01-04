@@ -35,6 +35,8 @@ type App struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	selectedFile  string
+	width         int
+	height        int
 }
 
 // NewApp creates a new TUI application
@@ -56,6 +58,12 @@ func (a App) Init() tea.Cmd {
 
 // Update handles messages and updates the application state
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle window size updates for all states
+	if msg, ok := msg.(tea.WindowSizeMsg); ok {
+		a.width = msg.Width
+		a.height = msg.Height
+	}
+
 	switch a.state {
 	case StateMenu:
 		return a.updateMenu(msg)
@@ -96,14 +104,14 @@ func (a App) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "validate", "repair":
 			// Show file browser
 			cwd, _ := os.Getwd()
-			a.browserModel = models.NewBrowserModel(cwd)
+			a.browserModel = models.NewBrowserModel(cwd, a.width, a.height)
 			a.state = StateBrowser
 			return a, a.browserModel.Init()
 
 		case "batch":
 			// Show directory browser for batch
 			cwd, _ := os.Getwd()
-			a.browserModel = models.NewBatchBrowserModel(cwd)
+			a.browserModel = models.NewBatchBrowserModel(cwd, a.width, a.height)
 			a.state = StateBrowser
 			return a, a.browserModel.Init()
 
@@ -166,12 +174,12 @@ func (a App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Operation complete, show report
 		switch result := msg.Result.(type) {
 		case *ebmlib.ValidationReport:
-			a.reportModel = models.NewReportModel(result)
+			a.reportModel = models.NewReportModel(result, a.width, a.height)
 			a.state = StateReport
 			return a, a.reportModel.Init()
 
 		case *ebmlib.RepairResult:
-			a.reportModel = models.NewRepairReportModel(result)
+			a.reportModel = models.NewRepairReportModel(result, a.width, a.height)
 			a.state = StateReport
 			return a, a.reportModel.Init()
 
@@ -203,7 +211,7 @@ func (a App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (a App) startBatch(path string) (tea.Model, tea.Cmd) {
 	files, err := collectBatchFiles(path)
 	if err != nil {
-		a.progressModel = models.NewProgressModel("Batch Processing", path, 0)
+		a.progressModel = models.NewProgressModel("Batch Processing", path, 0, a.width, a.height)
 		a.state = StateProgress
 		return a, tea.Batch(
 			a.progressModel.Init(),
@@ -220,7 +228,7 @@ func (a App) startBatch(path string) (tea.Model, tea.Cmd) {
 		)
 	}
 
-	a.progressModel = models.NewProgressModel("Batch Processing", path, len(files))
+	a.progressModel = models.NewProgressModel("Batch Processing", path, len(files), a.width, a.height)
 	a.state = StateProgress
 
 	return a, tea.Batch(
@@ -307,7 +315,7 @@ func (a App) updateReport(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // startValidation starts a validation operation
 func (a App) startValidation(filePath string) (tea.Model, tea.Cmd) {
-	a.progressModel = models.NewProgressModel("Validating", filePath, 1)
+	a.progressModel = models.NewProgressModel("Validating", filePath, 1, a.width, a.height)
 	a.state = StateProgress
 
 	// Start validation in background
@@ -339,7 +347,7 @@ func (a App) startValidation(filePath string) (tea.Model, tea.Cmd) {
 
 // startRepair starts a repair operation
 func (a App) startRepair(filePath string) (tea.Model, tea.Cmd) {
-	a.progressModel = models.NewProgressModel("Repairing", filePath, 1)
+	a.progressModel = models.NewProgressModel("Repairing", filePath, 1, a.width, a.height)
 	a.state = StateProgress
 
 	// Start repair in background

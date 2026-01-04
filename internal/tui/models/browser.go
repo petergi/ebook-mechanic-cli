@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -45,29 +46,43 @@ const (
 )
 
 // NewBrowserModel creates a new file browser starting at the given directory
-func NewBrowserModel(startDir string) BrowserModel {
-	return newBrowserModel(startDir, BrowserModeFile)
+func NewBrowserModel(startDir string, width, height int) BrowserModel {
+	return newBrowserModel(startDir, BrowserModeFile, width, height)
 }
 
 // NewBatchBrowserModel creates a browser configured for batch selection.
-func NewBatchBrowserModel(startDir string) BrowserModel {
-	return newBrowserModel(startDir, BrowserModeBatch)
+func NewBatchBrowserModel(startDir string, width, height int) BrowserModel {
+	return newBrowserModel(startDir, BrowserModeBatch, width, height)
 }
 
-func newBrowserModel(startDir string, mode BrowserMode) BrowserModel {
+func newBrowserModel(startDir string, mode BrowserMode, width, height int) BrowserModel {
 	if startDir == "" {
 		startDir, _ = os.Getwd()
+	}
+
+	if width == 0 {
+		width = 80
+	}
+	if height == 0 {
+		height = 24
+	}
+
+	// Calculate viewport size to fit all UI chrome
+	// Title (1) + pathBox (2) + fileListBox borders (2) + filterInfo (2) + helpBox (2) + spacing (3) = 12 lines overhead
+	viewportSize := height - 15
+	if viewportSize < 5 {
+		viewportSize = 5 // Minimum 5 items visible
 	}
 
 	m := BrowserModel{
 		currentDir:   startDir,
 		selected:     0,
-		width:        80,
-		height:       24,
+		width:        width,
+		height:       height,
 		showHidden:   false,
 		filterExts:   []string{".epub", ".pdf"},
 		mode:         mode,
-		viewportSize: 15,
+		viewportSize: viewportSize,
 	}
 
 	m.loadDirectory()
@@ -85,7 +100,11 @@ func (m BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.viewportSize = m.height - 10 // Reserve space for header/footer
+		// Recalculate viewport size to fit UI chrome
+		m.viewportSize = m.height - 15
+		if m.viewportSize < 5 {
+			m.viewportSize = 5
+		}
 		styles.AdaptToTerminal(m.width, m.height)
 		return m, nil
 
@@ -173,17 +192,31 @@ func (m BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the file browser
 func (m BrowserModel) View() string {
-	// Title showing current directory
+	// Title and current path header
 	title := styles.RenderTitle("📂 File Browser")
-	currentPath := styles.InfoStyle.Render("Current: " + m.currentDir)
+
+	// Current path in a subtle box
+	pathBox := lipgloss.NewStyle().
+		Foreground(styles.ColorInfo).
+		Border(lipgloss.NormalBorder(), false, false, true, false).
+		BorderForeground(styles.ColorMuted).
+		Padding(0, 1).
+		Width(m.width - 8).
+		Render(m.currentDir)
 
 	// Error message if any
 	var errorDisplay string
 	if m.errorMsg != "" {
-		errorDisplay = styles.RenderError(m.errorMsg) + "\n"
+		errorDisplay = lipgloss.NewStyle().
+			Foreground(styles.ColorError).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(styles.ColorError).
+			Padding(0, 1).
+			Width(m.width - 8).
+			Render(styles.IconCross + " " + m.errorMsg)
 	}
 
-	// Render file list with scrolling
+	// Render file list with scrolling in a bordered box
 	var itemsDisplay string
 	visibleStart := m.viewportTop
 	visibleEnd := m.viewportTop + m.viewportSize
@@ -193,7 +226,7 @@ func (m BrowserModel) View() string {
 
 	for i := visibleStart; i < visibleEnd; i++ {
 		item := m.items[i]
-		cursor := " "
+		cursor := "  "
 		icon := "📄"
 		if item.IsDir {
 			icon = "📁"
@@ -205,69 +238,79 @@ func (m BrowserModel) View() string {
 		}
 
 		if i == m.selected {
-			cursor = styles.IconArrow
-			itemsDisplay += styles.SelectedListItemStyle.Render(cursor+" "+line) + "\n"
+			cursor = styles.IconArrow + " "
+			itemsDisplay += styles.SelectedListItemStyle.Render(cursor+line) + "\n"
 		} else {
-			itemsDisplay += styles.ListItemStyle.Render(cursor+" "+line) + "\n"
+			itemsDisplay += styles.ListItemStyle.Render(cursor+line) + "\n"
 		}
 	}
+
+	// Wrap file list in bordered box
+	fileListBox := styles.BorderStyle.
+		Width(m.width - 8).
+		Height(m.viewportSize + 2).
+		Render(itemsDisplay)
 
 	// Scroll indicators
-	var scrollIndicator string
+	var scrollInfo string
 	if len(m.items) > m.viewportSize {
-		scrollIndicator = styles.MutedStyle.Render(
-			lipgloss.PlaceHorizontal(
-				m.width-4,
-				lipgloss.Right,
-				"↓ more ↓",
-			),
-		)
-		if m.viewportTop > 0 {
-			scrollIndicator = styles.MutedStyle.Render(
-				lipgloss.PlaceHorizontal(
-					m.width-4,
-					lipgloss.Right,
-					"↑ more ↑",
-				),
-			)
+		if m.viewportTop > 0 && m.viewportTop+m.viewportSize < len(m.items) {
+			scrollInfo = styles.MutedStyle.Render("↑ more above and below ↓")
+		} else if m.viewportTop > 0 {
+			scrollInfo = styles.MutedStyle.Render("↑ more above")
+		} else {
+			scrollInfo = styles.MutedStyle.Render("↓ more below")
 		}
 	}
 
-	// Help text
-	help := styles.HelpStyle.Render(
-		m.helpText(),
-	)
+	// File count and filter info in a status bar
+	filterInfo := lipgloss.NewStyle().
+		Foreground(styles.ColorMuted).
+		Border(lipgloss.NormalBorder(), true, false, false, false).
+		BorderForeground(styles.ColorMuted).
+		Padding(0, 1).
+		Width(m.width - 8).
+		Render(
+			lipgloss.JoinHorizontal(
+				lipgloss.Left,
+				"Showing: ",
+				lipgloss.NewStyle().Foreground(styles.ColorInfo).Render(strings.Join(m.filterExts, ", ")),
+				"  │  ",
+				"Items: ",
+				lipgloss.NewStyle().Foreground(styles.ColorInfo).Render(fmt.Sprintf("%d", len(m.items))),
+			),
+		)
 
-	// File count and filter info
-	filterInfo := styles.MutedStyle.Render(
-		lipgloss.JoinHorizontal(
-			lipgloss.Left,
-			"Showing: ",
-			styles.InfoStyle.Render(strings.Join(m.filterExts, ", ")),
-			"  |  ",
-			"Total: ",
-			styles.InfoStyle.Render(lipgloss.PlaceHorizontal(4, lipgloss.Right, lipgloss.NewStyle().Render(lipgloss.PlaceHorizontal(4, lipgloss.Right, lipgloss.NewStyle().Render(string(rune(len(m.items)))))))),
-		),
-	)
+	// Help text
+	helpBox := lipgloss.NewStyle().
+		Foreground(styles.ColorMuted).
+		Border(lipgloss.NormalBorder(), true, false, false, false).
+		BorderForeground(styles.ColorMuted).
+		Padding(1, 1).
+		Width(m.width - 8).
+		Render(m.helpText())
 
 	// Combine all parts
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		title,
-		currentPath,
-		"",
-		errorDisplay,
-		itemsDisplay,
-		scrollIndicator,
-		"",
-		filterInfo,
-		help,
-	)
+	var parts []string
+	parts = append(parts, title, pathBox)
+	if errorDisplay != "" {
+		parts = append(parts, "", errorDisplay)
+	}
+	parts = append(parts, "", fileListBox)
+	if scrollInfo != "" {
+		parts = append(parts, scrollInfo)
+	}
+	parts = append(parts, filterInfo, helpBox)
 
-	return styles.DocStyle.
-		Width(m.width).
-		Height(m.height).
-		Render(content)
+	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
+
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Top,
+		content,
+	)
 }
 
 func (m BrowserModel) helpText() string {

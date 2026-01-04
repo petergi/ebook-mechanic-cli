@@ -26,14 +26,21 @@ type ProgressModel struct {
 }
 
 // NewProgressModel creates a new progress model
-func NewProgressModel(operation string, filePath string, total int) ProgressModel {
+func NewProgressModel(operation string, filePath string, total int, width, height int) ProgressModel {
+	if width == 0 {
+		width = 80
+	}
+	if height == 0 {
+		height = 24
+	}
+
 	return ProgressModel{
 		operation: operation,
 		filePath:  filePath,
 		total:     total,
 		startTime: time.Now(),
-		width:     80,
-		height:    24,
+		width:     width,
+		height:    height,
 	}
 }
 
@@ -98,23 +105,28 @@ func (m ProgressModel) View() string {
 		return m.renderDone()
 	}
 
-	// Title
-	title := styles.RenderTitle(m.operation)
-
-	// Spinner
+	// Title with animated spinner
 	spinnerChar := string(styles.IconSpinner[m.spinner])
-	spinnerDisplay := styles.InfoStyle.Render(spinnerChar + " Processing...")
+	title := styles.RenderTitle(spinnerChar + "  " + m.operation)
 
-	// Current file (for single file operations)
-	var fileDisplay string
-	if m.total == 1 && m.filePath != "" {
-		fileDisplay = styles.MutedStyle.Render("File: " + m.filePath)
-	} else if m.currentFile != "" {
-		fileDisplay = styles.MutedStyle.Render("Current: " + m.currentFile)
+	// Status box
+	statusText := "Processing..."
+	if m.currentFile != "" {
+		statusText = "Current: " + m.currentFile
+	} else if m.total == 1 && m.filePath != "" {
+		statusText = "File: " + m.filePath
 	}
 
-	// Progress bar (for batch operations)
-	var progressDisplay string
+	statusBox := lipgloss.NewStyle().
+		Foreground(styles.ColorInfo).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.ColorInfo).
+		Padding(1, 2).
+		Width(60).
+		Render(statusText)
+
+	// Progress bar (for batch operations) in a box
+	var progressBox string
 	if m.total > 1 {
 		percentage := 0
 		if m.total > 0 {
@@ -122,73 +134,122 @@ func (m ProgressModel) View() string {
 		}
 
 		progressBar := styles.RenderProgressBar(m.current, m.total, 50)
-		progressText := fmt.Sprintf("%d / %d (%d%%)", m.current, m.total, percentage)
+		progressText := fmt.Sprintf("Completed: %d / %d (%d%%)", m.current, m.total, percentage)
 
-		progressDisplay = lipgloss.JoinVertical(
+		progressContent := lipgloss.JoinVertical(
 			lipgloss.Left,
+			progressText,
+			"",
 			progressBar,
-			styles.MutedStyle.Render(progressText),
 		)
+
+		progressBox = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(styles.ColorPrimary).
+			Padding(1, 2).
+			Width(60).
+			Render(progressContent)
 	}
 
-	// Elapsed time
+	// Time info in a subtle status bar
 	elapsed := time.Since(m.startTime)
-	timeDisplay := styles.MutedStyle.Render(
-		fmt.Sprintf("Elapsed: %s", elapsed.Round(time.Second)),
-	)
+	timeBar := lipgloss.NewStyle().
+		Foreground(styles.ColorMuted).
+		Border(lipgloss.NormalBorder(), true, false, false, false).
+		BorderForeground(styles.ColorMuted).
+		Padding(0, 1).
+		Width(60).
+		Render("Elapsed: " + elapsed.Round(time.Second).String())
 
 	// Help text
-	help := styles.HelpStyle.Render(
-		styles.RenderKeyBinding("ctrl+c", "cancel"),
-	)
+	helpBox := lipgloss.NewStyle().
+		Foreground(styles.ColorMuted).
+		Border(lipgloss.NormalBorder(), true, false, false, false).
+		BorderForeground(styles.ColorMuted).
+		Padding(1, 2).
+		Width(60).
+		Render(styles.RenderKeyBinding("ctrl+c", "cancel operation"))
 
 	// Combine all parts
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		title,
-		"",
-		spinnerDisplay,
-		fileDisplay,
-		"",
-		progressDisplay,
-		"",
-		timeDisplay,
-		"",
-		help,
-	)
+	var parts []string
+	parts = append(parts, title, "", statusBox)
+	if progressBox != "" {
+		parts = append(parts, "", progressBox)
+	}
+	parts = append(parts, "", timeBar, helpBox)
 
-	return styles.DocStyle.
-		Width(m.width).
-		Height(m.height).
-		Render(content)
+	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
+
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		content,
+	)
 }
 
 // renderDone renders the completion screen
 func (m ProgressModel) renderDone() string {
 	elapsed := time.Since(m.startTime)
 
-	title := styles.RenderSuccess(m.operation + " Complete!")
-	timeDisplay := styles.MutedStyle.Render(
-		fmt.Sprintf("Completed in: %s", elapsed.Round(time.Millisecond)),
-	)
+	title := styles.RenderTitle(styles.IconCheck + "  Operation Complete")
 
-	help := styles.HelpStyle.Render(
-		styles.RenderKeyBinding("enter", "continue"),
-	)
+	// Success summary in a highlighted box
+	summaryText := m.operation + " completed successfully!"
+	if m.total > 1 {
+		summaryText = fmt.Sprintf("%s completed successfully!\n\nProcessed: %d files", m.operation, m.total)
+	}
+
+	summaryBox := lipgloss.NewStyle().
+		Foreground(styles.ColorSuccess).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.ColorSuccess).
+		Padding(1, 2).
+		Width(60).
+		Render(summaryText)
+
+	// Time info
+	timeBar := lipgloss.NewStyle().
+		Foreground(styles.ColorMuted).
+		Border(lipgloss.NormalBorder(), true, false, false, false).
+		BorderForeground(styles.ColorMuted).
+		Padding(0, 1).
+		Width(60).
+		Render(
+			lipgloss.JoinHorizontal(
+				lipgloss.Left,
+				"Completed in: ",
+				lipgloss.NewStyle().Foreground(styles.ColorInfo).Render(elapsed.Round(time.Millisecond).String()),
+			),
+		)
+
+	// Help text
+	helpBox := lipgloss.NewStyle().
+		Foreground(styles.ColorMuted).
+		Border(lipgloss.NormalBorder(), true, false, false, false).
+		BorderForeground(styles.ColorMuted).
+		Padding(1, 2).
+		Width(60).
+		Render(styles.RenderKeyBinding("enter", "continue to results"))
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		title,
 		"",
-		timeDisplay,
+		summaryBox,
 		"",
-		help,
+		timeBar,
+		helpBox,
 	)
 
-	return styles.DocStyle.
-		Width(m.width).
-		Height(m.height).
-		Render(content)
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		content,
+	)
 }
 
 // tick returns a command that triggers a spinner animation update

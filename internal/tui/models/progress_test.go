@@ -9,7 +9,7 @@ import (
 )
 
 func TestNewProgressModel(t *testing.T) {
-	m := NewProgressModel("Validating", "test.epub", 1)
+	m := NewProgressModel("Validating", "test.epub", 1, 80, 24)
 
 	if m.operation != "Validating" {
 		t.Errorf("Expected operation 'Validating', got '%s'", m.operation)
@@ -46,7 +46,7 @@ func TestNewProgressModel(t *testing.T) {
 }
 
 func TestProgressModel_Init(t *testing.T) {
-	m := NewProgressModel("Validating", "test.epub", 1)
+	m := NewProgressModel("Validating", "test.epub", 1, 80, 24)
 	cmd := m.Init()
 
 	if cmd == nil {
@@ -61,7 +61,7 @@ func TestProgressModel_Init(t *testing.T) {
 }
 
 func TestProgressModel_Update_WindowSize(t *testing.T) {
-	m := NewProgressModel("Validating", "test.epub", 1)
+	m := NewProgressModel("Validating", "test.epub", 1, 80, 24)
 
 	updatedModel, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = updatedModel.(ProgressModel)
@@ -76,7 +76,7 @@ func TestProgressModel_Update_WindowSize(t *testing.T) {
 }
 
 func TestProgressModel_Update_TickMsg(t *testing.T) {
-	m := NewProgressModel("Validating", "test.epub", 1)
+	m := NewProgressModel("Validating", "test.epub", 1, 80, 24)
 	initialSpinner := m.spinner
 
 	updatedModel, cmd := m.Update(TickMsg(time.Now()))
@@ -94,7 +94,7 @@ func TestProgressModel_Update_TickMsg(t *testing.T) {
 }
 
 func TestProgressModel_Update_TickMsg_WhenDone(t *testing.T) {
-	m := NewProgressModel("Validating", "test.epub", 1)
+	m := NewProgressModel("Validating", "test.epub", 1, 80, 24)
 	m.done = true
 
 	updatedModel, cmd := m.Update(TickMsg(time.Now()))
@@ -107,7 +107,7 @@ func TestProgressModel_Update_TickMsg_WhenDone(t *testing.T) {
 }
 
 func TestProgressModel_Update_ProgressUpdate(t *testing.T) {
-	m := NewProgressModel("Batch Processing", "", 10)
+	m := NewProgressModel("Batch Processing", "", 10, 80, 24)
 
 	msg := ProgressUpdateMsg{
 		Current:     5,
@@ -128,7 +128,7 @@ func TestProgressModel_Update_ProgressUpdate(t *testing.T) {
 }
 
 func TestProgressModel_Update_OperationDone(t *testing.T) {
-	m := NewProgressModel("Validating", "test.epub", 1)
+	m := NewProgressModel("Validating", "test.epub", 1, 80, 24)
 
 	testResult := "test result"
 	msg := OperationDoneMsg{Result: testResult}
@@ -146,7 +146,7 @@ func TestProgressModel_Update_OperationDone(t *testing.T) {
 }
 
 func TestProgressModel_Update_CancelKey_WhenNotDone(t *testing.T) {
-	m := NewProgressModel("Validating", "test.epub", 1)
+	m := NewProgressModel("Validating", "test.epub", 1, 80, 24)
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 
@@ -161,7 +161,7 @@ func TestProgressModel_Update_CancelKey_WhenNotDone(t *testing.T) {
 }
 
 func TestProgressModel_Update_EnterKey_WhenDone(t *testing.T) {
-	m := NewProgressModel("Validating", "test.epub", 1)
+	m := NewProgressModel("Validating", "test.epub", 1, 80, 24)
 	m.done = true
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -177,7 +177,7 @@ func TestProgressModel_Update_EnterKey_WhenDone(t *testing.T) {
 }
 
 func TestProgressModel_Update_EscKey_WhenDone(t *testing.T) {
-	m := NewProgressModel("Validating", "test.epub", 1)
+	m := NewProgressModel("Validating", "test.epub", 1, 80, 24)
 	m.done = true
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -193,7 +193,7 @@ func TestProgressModel_Update_EscKey_WhenDone(t *testing.T) {
 }
 
 func TestProgressModel_Update_QuitKey_WhenDone(t *testing.T) {
-	m := NewProgressModel("Validating", "test.epub", 1)
+	m := NewProgressModel("Validating", "test.epub", 1, 80, 24)
 	m.done = true
 
 	tests := []struct {
@@ -219,7 +219,7 @@ func TestProgressModel_Update_QuitKey_WhenDone(t *testing.T) {
 }
 
 func TestProgressModel_Update_IgnoreKeysWhenNotDone(t *testing.T) {
-	m := NewProgressModel("Validating", "test.epub", 1)
+	m := NewProgressModel("Validating", "test.epub", 1, 80, 24)
 
 	tests := []struct {
 		name string
@@ -244,7 +244,7 @@ func TestProgressModel_Update_IgnoreKeysWhenNotDone(t *testing.T) {
 }
 
 func TestProgressModel_View_InProgress(t *testing.T) {
-	m := NewProgressModel("Validating", "test.epub", 1)
+	m := NewProgressModel("Validating", "test.epub", 1, 80, 24)
 
 	view := m.View()
 
@@ -258,7 +258,7 @@ func TestProgressModel_View_InProgress(t *testing.T) {
 }
 
 func TestProgressModel_View_Done(t *testing.T) {
-	m := NewProgressModel("Validating", "test.epub", 1)
+	m := NewProgressModel("Validating", "test.epub", 1, 80, 24)
 	m.done = true
 
 	view := m.View()
@@ -269,7 +269,7 @@ func TestProgressModel_View_Done(t *testing.T) {
 }
 
 func TestProgressModel_View_BatchProgress(t *testing.T) {
-	m := NewProgressModel("Batch Processing", "", 10)
+	m := NewProgressModel("Batch Processing", "", 10, 80, 24)
 	m.current = 5
 
 	view := m.View()
@@ -283,7 +283,7 @@ func TestProgressModel_View_BatchProgress(t *testing.T) {
 }
 
 func TestProgressModel_View_SingleFile(t *testing.T) {
-	m := NewProgressModel("Validating", "test.epub", 1)
+	m := NewProgressModel("Validating", "test.epub", 1, 80, 24)
 
 	view := m.View()
 
@@ -296,7 +296,7 @@ func TestProgressModel_View_SingleFile(t *testing.T) {
 }
 
 func TestProgressModel_View_CurrentFile(t *testing.T) {
-	m := NewProgressModel("Batch Processing", "", 10)
+	m := NewProgressModel("Batch Processing", "", 10, 80, 24)
 	m.current = 5
 	m.currentFile = "current.epub"
 
@@ -308,7 +308,7 @@ func TestProgressModel_View_CurrentFile(t *testing.T) {
 }
 
 func TestProgressModel_SpinnerAnimation(t *testing.T) {
-	m := NewProgressModel("Validating", "test.epub", 1)
+	m := NewProgressModel("Validating", "test.epub", 1, 80, 24)
 
 	// Simulate multiple ticks to verify spinner cycles
 	for i := 0; i < 10; i++ {
@@ -396,7 +396,7 @@ func TestTickMsg(t *testing.T) {
 }
 
 func TestProgressModel_MultipleUpdates(t *testing.T) {
-	m := NewProgressModel("Batch Processing", "", 10)
+	m := NewProgressModel("Batch Processing", "", 10, 80, 24)
 
 	// Simulate a series of progress updates
 	updates := []ProgressUpdateMsg{
@@ -423,7 +423,7 @@ func TestProgressModel_MultipleUpdates(t *testing.T) {
 }
 
 func TestProgressModel_ZeroTotalHandling(t *testing.T) {
-	m := NewProgressModel("Batch Processing", "", 0)
+	m := NewProgressModel("Batch Processing", "", 0, 80, 24)
 	m.current = 0
 
 	// Should not panic with zero total

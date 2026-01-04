@@ -122,46 +122,66 @@ func (m MenuModel) View() string {
 		return styles.RenderInfo("Goodbye!") + "\n"
 	}
 
-	// Title
+	// Title with decorative separator
 	title := styles.RenderTitle("📚 Ebook Mechanic")
 	subtitle := styles.RenderSubtitle("Choose an operation")
+	separator := styles.MutedStyle.Render(lipgloss.PlaceHorizontal(50, lipgloss.Left, "─────────────────────────────────────────────────"))
 
-	// Render menu options
+	// Render menu options in a bordered box
 	var options string
 	for i, opt := range m.options {
-		cursor := " "
+		cursor := "  "
 		if i == m.selected {
-			cursor = styles.IconArrow
-			options += styles.SelectedListItemStyle.Render(cursor+" "+opt.Label) + "\n"
-			options += styles.MutedStyle.Render("  "+opt.Description) + "\n\n"
+			cursor = styles.IconArrow + " "
+			options += styles.SelectedListItemStyle.Render(cursor+opt.Label) + "\n"
+			options += styles.MutedStyle.Render("  "+opt.Description) + "\n"
 		} else {
-			options += styles.ListItemStyle.Render(cursor+" "+opt.Label) + "\n"
-			options += styles.MutedStyle.Render("  "+opt.Description) + "\n\n"
+			options += styles.ListItemStyle.Render(cursor+opt.Label) + "\n"
+			options += styles.MutedStyle.Render("  "+opt.Description) + "\n"
+		}
+		if i < len(m.options)-1 {
+			options += "\n"
 		}
 	}
 
-	// Help text
-	help := styles.HelpStyle.Render(
-		styles.RenderKeyBinding("↑/↓", "navigate") + "  " +
-			styles.RenderKeyBinding("enter", "select") + "  " +
-			styles.RenderKeyBinding("q", "quit"),
-	)
+	// Wrap options in a bordered box
+	menuBox := styles.BorderStyle.
+		Width(50).
+		Render(options)
+
+	// Help text in a subtle box
+	helpText := styles.RenderKeyBinding("↑/↓", "navigate") + "  " +
+		styles.RenderKeyBinding("enter", "select") + "  " +
+		styles.RenderKeyBinding("q", "quit")
+
+	helpBox := lipgloss.NewStyle().
+		Foreground(styles.ColorMuted).
+		Border(lipgloss.NormalBorder(), true, false, false, false).
+		BorderForeground(styles.ColorMuted).
+		Padding(1, 2).
+		Width(50).
+		Render(helpText)
 
 	// Combine all parts
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		title,
 		subtitle,
+		separator,
 		"",
-		options,
-		help,
+		menuBox,
+		"",
+		helpBox,
 	)
 
 	// Center in terminal
-	return styles.DocStyle.
-		Width(m.width).
-		Height(m.height).
-		Render(content)
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		content,
+	)
 }
 
 // SelectedAction returns the action of the currently selected option
