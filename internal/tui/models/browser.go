@@ -29,12 +29,32 @@ type BrowserModel struct {
 	errorMsg     string
 	showHidden   bool
 	filterExts   []string // Filter by extensions (.epub, .pdf)
-	viewportTop  int      // For scrolling
-	viewportSize int      // Number of visible items
+	mode         BrowserMode
+	viewportTop  int // For scrolling
+	viewportSize int // Number of visible items
 }
+
+// BrowserMode configures how selection behaves.
+type BrowserMode int
+
+const (
+	// BrowserModeFile selects individual files and navigates directories.
+	BrowserModeFile BrowserMode = iota
+	// BrowserModeBatch selects directories or files for batch operations.
+	BrowserModeBatch
+)
 
 // NewBrowserModel creates a new file browser starting at the given directory
 func NewBrowserModel(startDir string) BrowserModel {
+	return newBrowserModel(startDir, BrowserModeFile)
+}
+
+// NewBatchBrowserModel creates a browser configured for batch selection.
+func NewBatchBrowserModel(startDir string) BrowserModel {
+	return newBrowserModel(startDir, BrowserModeBatch)
+}
+
+func newBrowserModel(startDir string, mode BrowserMode) BrowserModel {
 	if startDir == "" {
 		startDir, _ = os.Getwd()
 	}
@@ -46,6 +66,7 @@ func NewBrowserModel(startDir string) BrowserModel {
 		height:       24,
 		showHidden:   false,
 		filterExts:   []string{".epub", ".pdf"},
+		mode:         mode,
 		viewportSize: 15,
 	}
 
@@ -89,6 +110,11 @@ func (m BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.selected >= 0 && m.selected < len(m.items) {
 				item := m.items[m.selected]
 				if item.IsDir {
+					if m.mode == BrowserModeBatch {
+						return m, func() tea.Msg {
+							return DirectorySelectMsg{Path: item.Path}
+						}
+					}
 					m.currentDir = item.Path
 					m.selected = 0
 					m.viewportTop = 0
@@ -97,6 +123,19 @@ func (m BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// File selected, return message
 					return m, func() tea.Msg {
 						return FileSelectMsg{Path: item.Path}
+					}
+				}
+			}
+
+		case "right", "l":
+			if m.mode == BrowserModeBatch {
+				if m.selected >= 0 && m.selected < len(m.items) {
+					item := m.items[m.selected]
+					if item.IsDir {
+						m.currentDir = item.Path
+						m.selected = 0
+						m.viewportTop = 0
+						m.loadDirectory()
 					}
 				}
 			}
@@ -196,11 +235,7 @@ func (m BrowserModel) View() string {
 
 	// Help text
 	help := styles.HelpStyle.Render(
-		styles.RenderKeyBinding("↑/↓", "navigate") + "  " +
-			styles.RenderKeyBinding("enter", "select/open") + "  " +
-			styles.RenderKeyBinding("backspace", "parent dir") + "  " +
-			styles.RenderKeyBinding(".", "toggle hidden") + "  " +
-			styles.RenderKeyBinding("esc", "back"),
+		m.helpText(),
 	)
 
 	// File count and filter info
@@ -233,6 +268,23 @@ func (m BrowserModel) View() string {
 		Width(m.width).
 		Height(m.height).
 		Render(content)
+}
+
+func (m BrowserModel) helpText() string {
+	if m.mode == BrowserModeBatch {
+		return styles.RenderKeyBinding("↑/↓", "navigate") + "  " +
+			styles.RenderKeyBinding("enter", "select") + "  " +
+			styles.RenderKeyBinding("l/right", "open dir") + "  " +
+			styles.RenderKeyBinding("backspace", "parent dir") + "  " +
+			styles.RenderKeyBinding(".", "toggle hidden") + "  " +
+			styles.RenderKeyBinding("esc", "back")
+	}
+
+	return styles.RenderKeyBinding("↑/↓", "navigate") + "  " +
+		styles.RenderKeyBinding("enter", "select/open") + "  " +
+		styles.RenderKeyBinding("backspace", "parent dir") + "  " +
+		styles.RenderKeyBinding(".", "toggle hidden") + "  " +
+		styles.RenderKeyBinding("esc", "back")
 }
 
 // loadDirectory loads files and directories from the current directory
@@ -345,6 +397,11 @@ func (m BrowserModel) SelectedPath() string {
 
 // FileSelectMsg is sent when a file is selected
 type FileSelectMsg struct {
+	Path string
+}
+
+// DirectorySelectMsg is sent when a directory is selected for batch operations.
+type DirectorySelectMsg struct {
 	Path string
 }
 

@@ -1,12 +1,15 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/petergi/ebook-mechanic-lib/pkg/ebmlib"
+	"github.com/petergi/ebook-mechanic-cli/internal/operations"
 	"github.com/petergi/ebook-mechanic-cli/internal/tui/models"
+	"github.com/petergi/ebook-mechanic-lib/pkg/ebmlib"
 )
 
 func TestNewApp_InitialState(t *testing.T) {
@@ -234,7 +237,7 @@ func TestAppUpdateBrowser_StartRepair(t *testing.T) {
 	}
 }
 
-func TestAppUpdateBrowser_BatchDoesNotStartSingleOp(t *testing.T) {
+func TestAppUpdateBrowser_StartBatch(t *testing.T) {
 	app := NewApp()
 	app.state = StateBrowser
 
@@ -243,19 +246,26 @@ func TestAppUpdateBrowser_BatchDoesNotStartSingleOp(t *testing.T) {
 	model, _ = model.(models.MenuModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	app.menuModel = model.(models.MenuModel)
 
-	model, cmd := app.Update(models.FileSelectMsg{Path: "book.txt"})
+	tempDir := t.TempDir()
+	filePath := filepath.Join(tempDir, "book.epub")
+	if err := os.WriteFile(filePath, []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, cmd := app.Update(models.FileSelectMsg{Path: filePath})
 	updated := model.(App)
 
-	if updated.state != StateBrowser {
-		t.Errorf("expected state to remain StateBrowser, got %v", updated.state)
+	if updated.state != StateProgress {
+		t.Errorf("expected state to be StateProgress, got %v", updated.state)
 	}
 
-	if updated.selectedFile != "book.txt" {
-		t.Errorf("expected selectedFile to be set, got %s", updated.selectedFile)
+	doneMsg := extractOperationDoneMsg(t, cmd)
+	result, ok := doneMsg.Result.(operations.BatchResult)
+	if !ok {
+		t.Fatalf("expected BatchResult, got %T", doneMsg.Result)
 	}
-
-	if cmd != nil {
-		t.Error("expected no command for batch selection in browser")
+	if result.Total != 1 {
+		t.Errorf("expected 1 file in batch result, got %d", result.Total)
 	}
 }
 

@@ -168,6 +168,77 @@ func TestBrowserModel_Update_EnterDirectory(t *testing.T) {
 	}
 }
 
+func TestBrowserModel_Update_BatchEnterDirectory(t *testing.T) {
+	tmpDir := createTestDirectory(t)
+	subDir := filepath.Join(tmpDir, "subdir")
+	if err := os.Mkdir(subDir, 0755); err != nil {
+		t.Fatalf("Failed to create subdir: %v", err)
+	}
+
+	m := NewBatchBrowserModel(tmpDir)
+	m.loadDirectory()
+
+	dirIndex := -1
+	for i, item := range m.items {
+		if item.IsDir && item.Name == "subdir" {
+			dirIndex = i
+			break
+		}
+	}
+
+	if dirIndex == -1 {
+		t.Skip("Subdirectory not found in items")
+	}
+
+	m.selected = dirIndex
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if cmd == nil {
+		t.Fatal("Expected command to be non-nil for directory selection")
+	}
+
+	msg := cmd()
+	selectMsg, ok := msg.(DirectorySelectMsg)
+	if !ok {
+		t.Fatalf("Expected DirectorySelectMsg, got %T", msg)
+	}
+
+	if selectMsg.Path != subDir {
+		t.Errorf("Expected path %s, got %s", subDir, selectMsg.Path)
+	}
+}
+
+func TestBrowserModel_Update_BatchOpenDirectory(t *testing.T) {
+	tmpDir := createTestDirectory(t)
+	subDir := filepath.Join(tmpDir, "subdir")
+	if err := os.Mkdir(subDir, 0755); err != nil {
+		t.Fatalf("Failed to create subdir: %v", err)
+	}
+
+	m := NewBatchBrowserModel(tmpDir)
+	m.loadDirectory()
+
+	dirIndex := -1
+	for i, item := range m.items {
+		if item.IsDir && item.Name == "subdir" {
+			dirIndex = i
+			break
+		}
+	}
+
+	if dirIndex == -1 {
+		t.Skip("Subdirectory not found in items")
+	}
+
+	m.selected = dirIndex
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	m = updatedModel.(BrowserModel)
+
+	if m.currentDir != subDir {
+		t.Errorf("Expected currentDir to be %s, got %s", subDir, m.currentDir)
+	}
+}
+
 func TestBrowserModel_Update_SelectFile(t *testing.T) {
 	tmpDir := createTestDirectory(t)
 	testFile := filepath.Join(tmpDir, "test.epub")

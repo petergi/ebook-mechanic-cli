@@ -3,12 +3,16 @@ package tui
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/petergi/ebook-mechanic-lib/pkg/ebmlib"
 	"github.com/petergi/ebook-mechanic-cli/internal/operations"
 	"github.com/petergi/ebook-mechanic-cli/internal/tui/models"
+	"github.com/petergi/ebook-mechanic-lib/pkg/ebmlib"
 )
 
 // AppState represents the current state of the application
@@ -99,7 +103,7 @@ func (a App) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "batch":
 			// Show directory browser for batch
 			cwd, _ := os.Getwd()
-			a.browserModel = models.NewBrowserModel(cwd)
+			a.browserModel = models.NewBatchBrowserModel(cwd)
 			a.state = StateBrowser
 			return a, a.browserModel.Init()
 
@@ -131,6 +135,13 @@ func (a App) updateBrowser(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a.startValidation(msg.Path)
 		case "repair":
 			return a.startRepair(msg.Path)
+		case "batch":
+			return a.startBatch(msg.Path)
+		}
+	case models.DirectorySelectMsg:
+		menuAction := a.menuModel.SelectedAction()
+		if menuAction == "batch" {
+			return a.startBatch(msg.Path)
 		}
 
 	case models.BackToMenuMsg:
@@ -163,6 +174,12 @@ func (a App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.reportModel = models.NewRepairReportModel(result)
 			a.state = StateReport
 			return a, a.reportModel.Init()
+
+		case operations.BatchResult:
+			var m tea.Model
+			m, cmd = a.progressModel.Update(msg)
+			a.progressModel = m.(models.ProgressModel)
+			return a, cmd
 		}
 
 	case models.OperationCancelMsg:
@@ -181,6 +198,93 @@ func (a App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return a, cmd
+}
+
+func (a App) startBatch(path string) (tea.Model, tea.Cmd) {
+	files, err := collectBatchFiles(path)
+	if err != nil {
+		a.progressModel = models.NewProgressModel("Batch Processing", path, 0)
+		a.state = StateProgress
+		return a, tea.Batch(
+			a.progressModel.Init(),
+			func() tea.Msg {
+				return models.OperationDoneMsg{
+					Result: operations.BatchResult{
+						Failed: []operations.Result{
+							{FilePath: path, Error: fmt.Errorf("batch scan failed: %w", err)},
+						},
+						Total: 1,
+					},
+				}
+			},
+		)
+	}
+
+	a.progressModel = models.NewProgressModel("Batch Processing", path, len(files))
+	a.state = StateProgress
+
+	return a, tea.Batch(
+		a.progressModel.Init(),
+		func() tea.Msg {
+			start := time.Now()
+			batch := operations.NewBatchProcessor(operations.DefaultBatchConfig())
+			results := batch.Execute(files, operations.OperationValidate)
+			return models.OperationDoneMsg{
+				Result: operations.AggregateResults(results, time.Since(start)),
+			}
+		},
+	)
+}
+
+func collectBatchFiles(path string) ([]string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+
+	if !info.IsDir() {
+		if isEbookFile(path) {
+			return []string{path}, nil
+		}
+		return []string{}, nil
+	}
+
+	var files []string
+	err = filepath.WalkDir(path, func(entryPath string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+
+		if strings.HasPrefix(entry.Name(), ".") {
+			if entry.IsDir() && entryPath != path {
+				return filepath.SkipDir
+			}
+			if !entry.IsDir() {
+				return nil
+			}
+		}
+
+		if entry.IsDir() {
+			return nil
+		}
+
+		if isEbookFile(entryPath) {
+			files = append(files, entryPath)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return files, nil
+}
+
+func isEbookFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext == ".epub" || ext == ".pdf"
 }
 
 // updateReport handles report state updates
