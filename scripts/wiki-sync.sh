@@ -47,6 +47,14 @@ sync_docs() {
     log_info "Syncing docs content..."
     rsync -av --delete --exclude ".git" "$DOCS_DIR/" "$WIKI_DIR/"
 
+    # Promote ADRs to top-level pages for reliable wiki routing.
+    if [ -d "$DOCS_DIR/adr" ]; then
+        for adr_file in "$DOCS_DIR"/adr/*.md; do
+            adr_base="$(basename "$adr_file")"
+            cp "$adr_file" "$WIKI_DIR/ADR-$adr_base"
+        done
+    fi
+
     # Ensure Home page exists
     if [ -f "$DOCS_DIR/README.md" ]; then
         log_info "Creating Home.md from docs/README.md..."
