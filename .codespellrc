@@ -1,0 +1,13 @@
+[codespell]
+check-filenames = true
+check-hidden = true
+skip = ./.git,./build,./testdata,./go.sum
+quiet-level = 3
+ignore-words-list =
+    adn,
+    alow,
+    ba,
+    hist,
+    mutli,
+    teh,
+    varient

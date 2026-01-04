@@ -1,0 +1,51 @@
+# Build artifacts
+build/
+dist/
+coverage/
+completions/
+*.prof
+ebook-mechanic
+ebook-mechanic-*
+*.test
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Reports
+*.html
+ebook_mechanic_report_*.md
+coverage.out
+coverage.html
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+.claude/
+.amazonq/
+.cursor/
+test-library/
+.specstory/
+project_file_tree_*.md
+LTM.md
+
+# Swift
+Package.resolved
+xcuserdata/
+xcshareddata/
+
+# Go debug
+brk/
+
+.fake.bench
+.bench/
+
+.fake
+.build
+.lint-tmp/
+.lint-cache/

@@ -1,0 +1,4 @@
+I will give you text content, you will rewrite it to "simple language" (using clear and concise language that is easy for the intended audience to understand, avoiding overly complex sentence structures, technical jargon, or obscure vocabulary, and using familiar words and straightforward expressions). Keep the meaning the same. Make sure the re-written content's number of characters is exactly the same as the original text's number of characters. Do not alter the original structure and formatting outlined in any way. Only give me the output and nothing else. Now, using the concepts above, re-write the following text. Respond in the same language variety or dialect of the following text:
+"""
+{{ SELECTED TEXT }}
+"""

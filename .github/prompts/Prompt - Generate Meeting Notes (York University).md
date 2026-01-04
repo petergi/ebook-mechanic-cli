@@ -1,0 +1,3 @@
+Today's date is {{current_date}}.
+
+Generate meeting notes with the following parameters: - List all attendees - Summarize the key points, decisions, and action items from this meeting. - Identify and assign action items from this meeting to responsible parties - Create a DACI summary for the decisions made in this meeting, identifying the Driver, Approver, Contributor, and Informed for each decision.
