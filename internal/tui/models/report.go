@@ -2,27 +2,33 @@ package models
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/petergi/ebook-mechanic-cli/internal/operations"
 	"github.com/petergi/ebook-mechanic-cli/internal/tui/styles"
 	"github.com/petergi/ebook-mechanic-lib/pkg/ebmlib"
 )
 
 // ReportModel displays validation or repair results
 type ReportModel struct {
-	report         *ebmlib.ValidationReport
-	repairResult   *ebmlib.RepairResult
-	reportType     string // "validation" or "repair"
-	width          int
-	height         int
-	viewportTop    int
-	viewportSize   int
-	showErrors     bool
-	showWarnings   bool
-	showInfo       bool
-	selectedFilter int // 0: all, 1: errors, 2: warnings, 3: info
+	report          *ebmlib.ValidationReport
+	repairResult    *ebmlib.RepairResult
+	batchResult     *operations.BatchResult
+	reportType      string // "validation", "repair", "batch"
+	width           int
+	height          int
+	viewportTop     int
+	viewportSize    int
+	showErrors      bool
+	showWarnings    bool
+	showInfo        bool
+	selectedFilter  int    // 0: all, 1: errors, 2: warnings, 3: info
+	savedReportPath string // Path where report was saved
 }
 
 // NewReportModel creates a new report model for validation results
@@ -39,10 +45,39 @@ func NewReportModel(report *ebmlib.ValidationReport, width, height int) ReportMo
 		reportType:   "validation",
 		width:        width,
 		height:       height,
-		viewportSize: height - 12,
+		viewportSize: calculateViewportSize(height, "validation"),
 		showErrors:   true,
 		showWarnings: true,
 		showInfo:     true,
+	}
+}
+
+// NewBatchReportModel creates a new report model for batch results
+func NewBatchReportModel(result *operations.BatchResult, width, height int) ReportModel {
+	if width == 0 {
+		width = 80
+	}
+	if height == 0 {
+		height = 24
+	}
+
+	selectedFilter := 0 // Default to Invalid
+	if len(result.Invalid) == 0 && len(result.Errored) > 0 {
+		selectedFilter = 1 // Default to Errored if only system errors
+	} else if len(result.Invalid) == 0 && len(result.Errored) == 0 {
+		selectedFilter = 2 // Default to Valid if all good
+	}
+
+	return ReportModel{
+		batchResult:    result,
+		reportType:     "batch",
+		width:          width,
+		height:         height,
+		viewportSize:   calculateViewportSize(height, "batch"),
+		selectedFilter: selectedFilter,
+		showErrors:     true,
+		showWarnings:   true,
+		showInfo:       true,
 	}
 }
 
@@ -60,11 +95,36 @@ func NewRepairReportModel(result *ebmlib.RepairResult, width, height int) Report
 		reportType:   "repair",
 		width:        width,
 		height:       height,
-		viewportSize: height - 12,
+		viewportSize: calculateViewportSize(height, "repair"),
 		showErrors:   true,
 		showWarnings: true,
 		showInfo:     true,
 	}
+}
+
+func calculateViewportSize(height int, reportType string) int {
+	var offset int
+	switch reportType {
+	case "validation":
+		// Overhead: Title(2) + Path(3) + Gap(1) + Status(5) + Gap(1) + Summary(9) + Filters(1) + Border(2) + Help(5) = ~29
+		offset = 32
+	case "batch":
+		// Overhead: Title(2) + Status(5) + Gap(1) + Summary(9) + Border(2) + Help(5) = ~24
+		offset = 28
+	case "repair":
+		// Overhead: Title(2) + Status(5) + Border(2) + Help(5) = ~14 (plus actions content)
+		// Since repair doesn't use a viewport for actions currently, this just limits max size if we were to use it.
+		// For now we keep it safer.
+		offset = 20
+	default:
+		offset = 12
+	}
+
+	size := height - offset
+	if size < 5 {
+		return 5 // Minimum viewport size
+	}
+	return size
 }
 
 // Init initializes the model
@@ -78,7 +138,7 @@ func (m ReportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.viewportSize = m.height - 12
+		m.viewportSize = calculateViewportSize(m.height, m.reportType)
 		styles.AdaptToTerminal(m.width, m.height)
 		return m, nil
 
@@ -93,32 +153,62 @@ func (m ReportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewportTop++
 
 		case "1":
-			m.selectedFilter = 0 // Show all
-			m.showErrors = true
-			m.showWarnings = true
-			m.showInfo = true
-			m.viewportTop = 0
+			if m.reportType == "batch" {
+				m.selectedFilter = 0 // Invalid
+				m.viewportTop = 0
+			} else {
+				m.selectedFilter = 0 // Show all
+				m.showErrors = true
+				m.showWarnings = true
+				m.showInfo = true
+				m.viewportTop = 0
+			}
 
 		case "2":
-			m.selectedFilter = 1 // Show errors only
-			m.showErrors = true
-			m.showWarnings = false
-			m.showInfo = false
-			m.viewportTop = 0
+			if m.reportType == "batch" {
+				m.selectedFilter = 1 // Errored
+				m.viewportTop = 0
+			} else {
+				m.selectedFilter = 1 // Show errors only
+				m.showErrors = true
+				m.showWarnings = false
+				m.showInfo = false
+				m.viewportTop = 0
+			}
 
 		case "3":
-			m.selectedFilter = 2 // Show warnings only
-			m.showErrors = false
-			m.showWarnings = true
-			m.showInfo = false
-			m.viewportTop = 0
+			if m.reportType == "batch" {
+				m.selectedFilter = 2 // Valid
+				m.viewportTop = 0
+			} else {
+				m.selectedFilter = 2 // Show warnings only
+				m.showErrors = false
+				m.showWarnings = true
+				m.showInfo = false
+				m.viewportTop = 0
+			}
 
 		case "4":
-			m.selectedFilter = 3 // Show info only
-			m.showErrors = false
-			m.showWarnings = false
-			m.showInfo = true
-			m.viewportTop = 0
+			if m.reportType == "batch" {
+				m.selectedFilter = 3 // All
+				m.viewportTop = 0
+			} else {
+				m.selectedFilter = 3 // Show info only
+				m.showErrors = false
+				m.showWarnings = false
+				m.showInfo = true
+				m.viewportTop = 0
+			}
+
+		case "s":
+			// Save report to file
+			return m, func() tea.Msg {
+				path, err := m.saveReport()
+				if err != nil {
+					return ReportSaveMsg{Error: err}
+				}
+				return ReportSaveMsg{Path: path}
+			}
 
 		case "enter", "esc":
 			// Return to menu
@@ -129,6 +219,14 @@ func (m ReportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		}
+
+	case ReportSaveMsg:
+		if msg.Error != nil {
+			// Handle error - for now just ignore, could show error in UI
+			return m, nil
+		}
+		m.savedReportPath = msg.Path
+		return m, nil
 	}
 
 	return m, nil
@@ -138,6 +236,9 @@ func (m ReportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m ReportModel) View() string {
 	if m.reportType == "repair" {
 		return m.renderRepairReport()
+	}
+	if m.reportType == "batch" {
+		return m.renderBatchReport()
 	}
 	return m.renderValidationReport()
 }
@@ -158,7 +259,19 @@ func (m ReportModel) renderValidationReport() string {
 		BorderForeground(styles.ColorMuted).
 		Padding(0, 1).
 		Width(m.width - 8).
-		Render(m.report.FilePath)
+		Render(m.makeClickable(m.report.FilePath))
+
+	// Success message if report was saved
+	var savedBox string
+	if m.savedReportPath != "" {
+		savedBox = lipgloss.NewStyle().
+			Foreground(styles.ColorSuccess).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(styles.ColorSuccess).
+			Padding(0, 1).
+			Width(m.width - 8).
+			Render(fmt.Sprintf("%s Report saved to: %s", styles.IconCheck, m.makeClickable(m.savedReportPath)))
+	}
 
 	// Overall status in highlighted box
 	var statusText string
@@ -208,22 +321,19 @@ func (m ReportModel) renderValidationReport() string {
 		Render(
 			styles.RenderKeyBinding("1-4", "filter") + "  " +
 				styles.RenderKeyBinding("↑/↓", "scroll") + "  " +
+				styles.RenderKeyBinding("s", "save report") + "  " +
 				styles.RenderKeyBinding("enter", "continue"),
 		)
 
 	// Combine all parts
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		title,
-		pathBox,
-		"",
-		statusBox,
-		"",
-		summaryBox,
-		filters,
-		issuesBox,
-		helpBox,
-	)
+	var parts []string
+	parts = append(parts, title, pathBox)
+	if savedBox != "" {
+		parts = append(parts, "", savedBox)
+	}
+	parts = append(parts, "", statusBox, "", summaryBox, filters, issuesBox, helpBox)
+
+	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
 	return lipgloss.Place(
 		m.width,
@@ -249,7 +359,7 @@ func (m ReportModel) renderRepairReport() string {
 		statusText = styles.IconCheck + "  Repair successful!"
 		statusColor = styles.ColorSuccess
 		if m.repairResult.BackupPath != "" {
-			statusText += "\n\n" + "Backup created at:\n" + m.repairResult.BackupPath
+			statusText += "\n\n" + "Backup created at:\n" + m.makeClickable(m.repairResult.BackupPath)
 		}
 	} else {
 		statusText = styles.IconCross + "  Repair failed"
@@ -266,6 +376,18 @@ func (m ReportModel) renderRepairReport() string {
 		Padding(1, 2).
 		Width(m.width - 8).
 		Render(statusText)
+
+	// Success message if report was saved
+	var savedBox string
+	if m.savedReportPath != "" {
+		savedBox = lipgloss.NewStyle().
+			Foreground(styles.ColorSuccess).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(styles.ColorSuccess).
+			Padding(0, 1).
+			Width(m.width - 8).
+			Render(fmt.Sprintf("%s Report saved to: %s", styles.IconCheck, m.makeClickable(m.savedReportPath)))
+	}
 
 	// Actions applied in a bordered box
 	var actionsBox string
@@ -297,15 +419,22 @@ func (m ReportModel) renderRepairReport() string {
 		BorderForeground(styles.ColorMuted).
 		Padding(1, 2).
 		Width(m.width - 8).
-		Render(styles.RenderKeyBinding("enter", "continue"))
+		Render(
+			styles.RenderKeyBinding("s", "save report") + "  " +
+				styles.RenderKeyBinding("enter", "continue"),
+		)
 
 	// Combine all parts
 	var parts []string
-	parts = append(parts, title, statusBox)
+	parts = append(parts, title)
+	if savedBox != "" {
+		parts = append(parts, "", savedBox)
+	}
+	parts = append(parts, "", statusBox)
 	if actionsBox != "" {
 		parts = append(parts, "", actionsBox)
 	}
-	parts = append(parts, helpBox)
+	parts = append(parts, "", helpBox)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
@@ -316,6 +445,210 @@ func (m ReportModel) renderRepairReport() string {
 		lipgloss.Center,
 		content,
 	)
+}
+
+func (m ReportModel) renderBatchReport() string {
+	if m.batchResult == nil {
+		return styles.RenderError("No batch result available")
+	}
+
+	title := styles.RenderTitle("📦 Batch Report")
+
+	// Status in highlighted box
+	var statusText string
+	var statusColor lipgloss.AdaptiveColor
+	if len(m.batchResult.Invalid) == 0 && len(m.batchResult.Errored) == 0 {
+		statusText = styles.IconCheck + "  All files processed successfully!"
+		statusColor = styles.ColorSuccess
+	} else {
+		statusText = fmt.Sprintf("%s  Found %d invalid and %d system error(s)", styles.IconCross, len(m.batchResult.Invalid), len(m.batchResult.Errored))
+		statusColor = styles.ColorError
+	}
+
+	statusBox := lipgloss.NewStyle().
+		Foreground(statusColor).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(statusColor).
+		Padding(1, 2).
+		Width(m.width - 8).
+		Render(statusText)
+
+	// Summary
+	headers := []string{"Metric", "Value"}
+	rows := [][]string{
+		{"Total Files", fmt.Sprintf("%d", m.batchResult.Total)},
+		{"Valid", fmt.Sprintf("%d", len(m.batchResult.Valid))},
+		{"Invalid", fmt.Sprintf("%d", len(m.batchResult.Invalid))},
+		{"System Errors", fmt.Sprintf("%d", len(m.batchResult.Errored))},
+		{"Duration", m.batchResult.Duration.Round(time.Millisecond).String()},
+	}
+	summaryContent := styles.RenderTable(headers, rows)
+	summaryBox := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(styles.ColorPrimary).
+		Padding(1, 2).
+		Width(m.width - 8).
+		Render(summaryContent)
+
+	// Filters
+	filters := m.renderBatchFilters()
+
+	// File list based on filter
+	var listContent string
+	var items []string
+
+	// Filter: 0=Invalid, 1=Errored, 2=Valid, 3=All
+	switch m.selectedFilter {
+	case 0: // Invalid
+		for _, r := range m.batchResult.Invalid {
+			items = append(items, m.formatBatchItem(r, "invalid"))
+		}
+	case 1: // Errored
+		for _, r := range m.batchResult.Errored {
+			items = append(items, m.formatBatchItem(r, "errored"))
+		}
+	case 2: // Valid
+		for _, r := range m.batchResult.Valid {
+			items = append(items, m.formatBatchItem(r, "valid"))
+		}
+	case 3: // All
+		for _, r := range m.batchResult.Errored {
+			items = append(items, m.formatBatchItem(r, "errored"))
+		}
+		for _, r := range m.batchResult.Invalid {
+			items = append(items, m.formatBatchItem(r, "invalid"))
+		}
+		for _, r := range m.batchResult.Valid {
+			items = append(items, m.formatBatchItem(r, "valid"))
+		}
+	}
+
+	if len(items) > 0 {
+		listContent = strings.Join(items, "\n")
+	} else {
+		listContent = styles.MutedStyle.Render("No items to display")
+	}
+
+	// Apply viewport scrolling
+	lines := strings.Split(listContent, "\n")
+	start := m.viewportTop
+	end := m.viewportTop + m.viewportSize
+	if end > len(lines) {
+		end = len(lines)
+	}
+	if start >= len(lines) {
+		m.viewportTop = len(lines) - m.viewportSize
+		if m.viewportTop < 0 {
+			m.viewportTop = 0
+		}
+		start = m.viewportTop
+	}
+	visibleLines := lines[start:end]
+	listContent = strings.Join(visibleLines, "\n")
+
+	// Scroll indicators
+	if len(lines) > m.viewportSize {
+		if m.viewportTop > 0 {
+			listContent = styles.MutedStyle.Render("↑ more ↑") + "\n" + listContent
+		}
+		if end < len(lines) {
+			listContent = listContent + "\n" + styles.MutedStyle.Render("↓ more ↓")
+		}
+	}
+
+	listBox := styles.BorderStyle.
+		Width(m.width - 8).
+		Height(m.viewportSize + 2).
+		Render(listContent)
+
+	// Help text
+	helpBox := lipgloss.NewStyle().
+		Foreground(styles.ColorMuted).
+		Border(lipgloss.NormalBorder(), true, false, false, false).
+		BorderForeground(styles.ColorMuted).
+		Padding(1, 2).
+		Width(m.width - 8).
+		Render(
+			styles.RenderKeyBinding("1-4", "filter") + "  " +
+				styles.RenderKeyBinding("↑/↓", "scroll") + "  " +
+				styles.RenderKeyBinding("s", "save report") + "  " +
+				styles.RenderKeyBinding("enter", "continue"),
+		)
+
+	// Combine all parts
+	content := lipgloss.JoinVertical(lipgloss.Left, title, statusBox, "", summaryBox, filters, listBox, helpBox)
+
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Top,
+		content,
+	)
+}
+
+func (m ReportModel) renderBatchFilters() string {
+	tabs := []string{
+		"1: Invalid",
+		"2: Errored",
+		"3: Valid",
+		"4: All",
+	}
+
+	var rendered []string
+	for i, tab := range tabs {
+		if i == m.selectedFilter {
+			rendered = append(rendered, styles.SelectedListItemStyle.Render(tab))
+		} else {
+			rendered = append(rendered, styles.MutedStyle.Render(tab))
+		}
+	}
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, rendered...)
+}
+
+func (m ReportModel) formatBatchItem(r operations.Result, category string) string {
+	var icon string
+	var style lipgloss.Style
+
+	switch category {
+	case "valid":
+		icon = styles.IconCheck
+		style = styles.SuccessStyle
+	case "invalid":
+		icon = styles.IconCross
+		style = styles.ErrorStyle
+	case "errored":
+		icon = "⚠"
+		style = styles.ErrorStyle
+	}
+
+	msg := fmt.Sprintf("%s %s", icon, m.makeClickable(filepath.Base(r.FilePath)))
+	
+	switch category {
+	case "invalid":
+		if r.Report != nil && !r.Report.IsValid {
+			msg += fmt.Sprintf(": %d errors", r.Report.ErrorCount())
+		} else if r.Repair != nil && !r.Repair.Success {
+			if r.Repair.Error != nil {
+				msg += ": " + r.Repair.Error.Error()
+			} else {
+				msg += ": repair failed"
+			}
+		}
+	case "errored":
+		if r.Error != nil {
+			msg += ": " + r.Error.Error()
+		}
+	case "valid":
+		if r.Report != nil {
+			msg += " (Valid)"
+		} else if r.Repair != nil {
+			msg += " (Repaired)"
+		}
+	}
+
+	return style.Render(msg)
 }
 
 // renderSummary renders the issue summary
@@ -448,4 +781,123 @@ func (m ReportModel) formatIssue(issue ebmlib.ValidationError, issueType string)
 	}
 
 	return formatted
+}
+
+func (m ReportModel) makeClickable(path string) string {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return path
+	}
+	fileURL := "file://" + absPath
+	// OSC 8 hyperlink format: \x1b]8;;<URL>\x1b\\<TEXT>\x1b]8;;\x1b\\
+	return fmt.Sprintf("\x1b]8;;%s\x1b\\%s\x1b]8;;\x1b\\", fileURL, path)
+}
+
+func (m ReportModel) saveReport() (string, error) {
+	// Create reports directory
+	reportDir := "reports"
+	if err := os.MkdirAll(reportDir, 0755); err != nil {
+		return "", err
+	}
+
+	// Generate filename based on timestamp
+	timestamp := time.Now().Format("20060102-150405")
+	var filename string
+	var content string
+
+	if m.reportType == "repair" {
+		filename = fmt.Sprintf("repair-%s.txt", timestamp)
+		// Basic text formatting for repair
+		var b strings.Builder
+		b.WriteString("=== Repair Report ===\n\n")
+		if m.repairResult.Success {
+			b.WriteString("Status: Success\n")
+		} else {
+			b.WriteString("Status: Failed\n")
+			if m.repairResult.Error != nil {
+				b.WriteString(fmt.Sprintf("Error: %v\n", m.repairResult.Error))
+			}
+		}
+		if m.repairResult.BackupPath != "" {
+			b.WriteString(fmt.Sprintf("Backup: %s\n", m.repairResult.BackupPath))
+		}
+		b.WriteString("\nActions Applied:\n")
+		for _, action := range m.repairResult.ActionsApplied {
+			b.WriteString(fmt.Sprintf("- %s\n", action.Description))
+		}
+		content = b.String()
+	} else if m.reportType == "batch" {
+		filename = fmt.Sprintf("batch-%s.txt", timestamp)
+		var b strings.Builder
+		b.WriteString("=== Batch Report ===\n\n")
+		b.WriteString(fmt.Sprintf("Total Files: %d\n", m.batchResult.Total))
+		b.WriteString(fmt.Sprintf("Valid: %d\n", len(m.batchResult.Valid)))
+		b.WriteString(fmt.Sprintf("Invalid: %d\n", len(m.batchResult.Invalid)))
+		b.WriteString(fmt.Sprintf("System Errors: %d\n", len(m.batchResult.Errored)))
+		b.WriteString(fmt.Sprintf("Duration: %v\n\n", m.batchResult.Duration))
+
+		if len(m.batchResult.Errored) > 0 {
+			b.WriteString("System Errors:\n")
+			for _, r := range m.batchResult.Errored {
+				b.WriteString(fmt.Sprintf("- %s: %v\n", filepath.Base(r.FilePath), r.Error))
+			}
+			b.WriteString("\n")
+		}
+
+		if len(m.batchResult.Invalid) > 0 {
+			b.WriteString("Invalid Files:\n")
+			for _, r := range m.batchResult.Invalid {
+				b.WriteString(fmt.Sprintf("- %s: ", filepath.Base(r.FilePath)))
+				if r.Report != nil && !r.Report.IsValid {
+					b.WriteString(fmt.Sprintf("%d errors\n", r.Report.ErrorCount()))
+				} else if r.Repair != nil && !r.Repair.Success {
+					b.WriteString("repair failed\n")
+				} else {
+					b.WriteString("unknown error\n")
+				}
+			}
+			b.WriteString("\n")
+		}
+
+		if len(m.batchResult.Valid) > 0 {
+			b.WriteString("Valid Files:\n")
+			for _, r := range m.batchResult.Valid {
+				b.WriteString(fmt.Sprintf("- %s\n", filepath.Base(r.FilePath)))
+			}
+		}
+		content = b.String()
+	} else {
+		filename = fmt.Sprintf("validation-%s.txt", timestamp)
+		// We can reuse the CLI TextFormatter logic if we want,
+		// but for now simple text output
+		var b strings.Builder
+		b.WriteString("=== Validation Report ===\n\n")
+		b.WriteString(fmt.Sprintf("File: %s\n", m.report.FilePath))
+		b.WriteString(fmt.Sprintf("Status: %v\n\n", m.report.IsValid))
+		b.WriteString("Summary:\n")
+		b.WriteString(fmt.Sprintf("- Errors: %d\n", m.report.ErrorCount()))
+		b.WriteString(fmt.Sprintf("- Warnings: %d\n", m.report.WarningCount()))
+		b.WriteString(fmt.Sprintf("- Info: %d\n\n", m.report.InfoCount()))
+
+		if len(m.report.Errors) > 0 {
+			b.WriteString("Errors:\n")
+			for _, err := range m.report.Errors {
+				b.WriteString(fmt.Sprintf("- [%s] %s\n", err.Code, err.Message))
+			}
+		}
+		content = b.String()
+	}
+
+	path := filepath.Join(reportDir, filename)
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		return "", err
+	}
+
+	return path, nil
+}
+
+// ReportSaveMsg is sent when a report is saved
+type ReportSaveMsg struct {
+	Path  string
+	Error error
 }

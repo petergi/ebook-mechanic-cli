@@ -28,17 +28,27 @@ func NewMenuModel() MenuModel {
 		options: []MenuOption{
 			{
 				Label:       "Validate EPUB/PDF",
-				Description: "Check ebook files for errors and issues",
+				Description: "Check a single ebook file for errors",
 				Action:      "validate",
 			},
 			{
 				Label:       "Repair EPUB/PDF",
-				Description: "Automatically fix common ebook problems",
+				Description: "Automatically fix a single ebook file",
 				Action:      "repair",
 			},
 			{
-				Label:       "Batch Process",
-				Description: "Validate or repair multiple files at once",
+				Label:       "Validate Multiple Files",
+				Description: "Select multiple files for validation",
+				Action:      "multi-validate",
+			},
+			{
+				Label:       "Repair Multiple Files",
+				Description: "Select multiple files for repair",
+				Action:      "multi-repair",
+			},
+			{
+				Label:       "Batch Process Directory",
+				Description: "Validate or repair all files in a folder",
 				Action:      "batch",
 			},
 			{
@@ -195,4 +205,9 @@ func (m MenuModel) SelectedAction() string {
 // MenuSelectMsg is sent when a menu option is selected
 type MenuSelectMsg struct {
 	Action string
+}
+
+// Quitting returns true if the user wants to quit
+func (m MenuModel) Quitting() bool {
+	return m.quitting
 }

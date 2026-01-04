@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/petergi/ebook-mechanic-cli/internal/operations"
@@ -23,6 +24,7 @@ type ProgressModel struct {
 	spinner     int
 	done        bool
 	result      interface{} // Holds the final result when done
+	progress    progress.Model
 }
 
 // NewProgressModel creates a new progress model
@@ -34,6 +36,12 @@ func NewProgressModel(operation string, filePath string, total int, width, heigh
 		height = 24
 	}
 
+	p := progress.New(
+		progress.WithDefaultGradient(),
+		progress.WithWidth(width-20), // Adjust width to fit
+		progress.WithoutPercentage(),
+	)
+
 	return ProgressModel{
 		operation: operation,
 		filePath:  filePath,
@@ -41,6 +49,7 @@ func NewProgressModel(operation string, filePath string, total int, width, heigh
 		startTime: time.Now(),
 		width:     width,
 		height:    height,
+		progress:  p,
 	}
 }
 
@@ -55,13 +64,19 @@ func (m ProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.progress.Width = msg.Width - 20
 		styles.AdaptToTerminal(m.width, m.height)
 		return m, nil
 
 	case tea.KeyMsg:
 		if m.done {
 			switch msg.String() {
-			case "enter", "esc":
+			case "enter":
+				// View results
+				return m, func() tea.Msg {
+					return ViewReportMsg{Result: m.result}
+				}
+			case "esc":
 				// Return to menu
 				return m, func() tea.Msg {
 					return BackToMenuMsg{}
@@ -88,11 +103,24 @@ func (m ProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ProgressUpdateMsg:
 		m.current = msg.Current
 		m.currentFile = msg.CurrentFile
+		if m.total > 0 {
+			cmd := m.progress.SetPercent(float64(m.current) / float64(m.total))
+			return m, cmd
+		}
 		return m, nil
+
+	case progress.FrameMsg:
+		progressModel, cmd := m.progress.Update(msg)
+		m.progress = progressModel.(progress.Model)
+		return m, cmd
 
 	case OperationDoneMsg:
 		m.done = true
 		m.result = msg.Result
+		if m.total > 0 {
+			cmd := m.progress.SetPercent(1.0)
+			return m, cmd
+		}
 		return m, nil
 	}
 
@@ -122,32 +150,31 @@ func (m ProgressModel) View() string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(styles.ColorInfo).
 		Padding(1, 2).
-		Width(60).
+		Width(m.width - 4).
 		Render(statusText)
 
 	// Progress bar (for batch operations) in a box
 	var progressBox string
 	if m.total > 1 {
-		percentage := 0
+		percentage := 0.0
 		if m.total > 0 {
-			percentage = (m.current * 100) / m.total
+			percentage = float64(m.current) / float64(m.total) * 100
 		}
 
-		progressBar := styles.RenderProgressBar(m.current, m.total, 50)
-		progressText := fmt.Sprintf("Completed: %d / %d (%d%%)", m.current, m.total, percentage)
+		progressText := fmt.Sprintf("Completed: %d / %d (%.0f%%)", m.current, m.total, percentage)
 
 		progressContent := lipgloss.JoinVertical(
 			lipgloss.Left,
 			progressText,
 			"",
-			progressBar,
+			m.progress.View(),
 		)
 
 		progressBox = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).
 			BorderForeground(styles.ColorPrimary).
 			Padding(1, 2).
-			Width(60).
+			Width(m.width - 4).
 			Render(progressContent)
 	}
 
@@ -158,7 +185,7 @@ func (m ProgressModel) View() string {
 		Border(lipgloss.NormalBorder(), true, false, false, false).
 		BorderForeground(styles.ColorMuted).
 		Padding(0, 1).
-		Width(60).
+		Width(m.width - 4).
 		Render("Elapsed: " + elapsed.Round(time.Second).String())
 
 	// Help text
@@ -167,7 +194,7 @@ func (m ProgressModel) View() string {
 		Border(lipgloss.NormalBorder(), true, false, false, false).
 		BorderForeground(styles.ColorMuted).
 		Padding(1, 2).
-		Width(60).
+		Width(m.width - 4).
 		Render(styles.RenderKeyBinding("ctrl+c", "cancel operation"))
 
 	// Combine all parts
@@ -276,6 +303,11 @@ type OperationDoneMsg struct {
 
 // OperationCancelMsg signals that the user wants to cancel
 type OperationCancelMsg struct{}
+
+// ViewReportMsg signals request to view the report
+type ViewReportMsg struct {
+	Result interface{}
+}
 
 // ConvertBatchProgress converts batch progress to progress message
 func ConvertBatchProgress(update operations.ProgressUpdate) ProgressUpdateMsg {

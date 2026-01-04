@@ -159,6 +159,7 @@ const (
 	IconArrow   = "→"
 	IconBullet  = "•"
 	IconSpinner = "⣾⣽⣻⢿⡿⣟⣯⣷" // Animation frames for spinner
+	IconLink    = "🔗"
 )
 
 // Helper functions
@@ -232,6 +233,11 @@ func RenderTable(headers []string, rows [][]string) string {
 		}
 	}
 
+	// Add padding to widths to prevent tight packing
+	for i := range widths {
+		widths[i] += 2 // Extra padding
+	}
+
 	// Render header
 	var headerCells []string
 	for i, h := range headers {
@@ -269,4 +275,17 @@ func AdaptToTerminal(width, height int) {
 	if width < 60 {
 		DocStyle = DocStyle.Padding(0, 1)
 	}
+}
+
+// RenderHyperlink renders a clickable hyperlink using OSC 8 escape sequences
+// Supported in modern terminals like iTerm2, kitty, WezTerm, etc.
+func RenderHyperlink(url, displayText string) string {
+	// OSC 8 format: \x1b]8;;{url}\x1b\\{text}\x1b]8;;\x1b\\
+	return "\x1b]8;;" + url + "\x1b\\" + displayText + "\x1b]8;;\x1b\\"
+}
+
+// RenderStyledHyperlink renders a hyperlink with styling applied
+func RenderStyledHyperlink(url, displayText string) string {
+	link := RenderHyperlink(url, displayText)
+	return InfoStyle.Render(IconLink + " " + link)
 }

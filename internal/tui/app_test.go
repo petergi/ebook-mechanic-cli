@@ -242,9 +242,12 @@ func TestAppUpdateBrowser_StartBatch(t *testing.T) {
 	app.state = StateBrowser
 
 	menu := models.NewMenuModel()
-	model, _ := menu.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	model, _ = model.(models.MenuModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	app.menuModel = model.(models.MenuModel)
+	// Navigate to "Batch Process" (index 4)
+	for i := 0; i < 4; i++ {
+		model, _ := menu.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		menu = model.(models.MenuModel)
+	}
+	app.menuModel = menu
 
 	tempDir := t.TempDir()
 	filePath := filepath.Join(tempDir, "book.epub")
@@ -252,7 +255,7 @@ func TestAppUpdateBrowser_StartBatch(t *testing.T) {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
-	model, cmd := app.Update(models.FileSelectMsg{Path: filePath})
+	model, cmd := app.Update(models.DirectorySelectMsg{Path: filePath}) // Should trigger batch from DirectorySelectMsg
 	updated := model.(App)
 
 	if updated.state != StateProgress {

@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    // mcp definitions here.
+    "Pieces": {
+      "command": "pieces",
+      "args": ["--ignore-onboarding", "mcp", "start"]
+    },
+    "sequential thinking": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
+    "MCP_DOCKER": {
+      "command": "docker",
+      "args": ["mcp", "gateway", "run"]
+    },
+    "Ref": {
+      "type": "http",
+      "url": "https://api.ref.tools/mcp",
+      "headers": {
+        "x-ref-api-key": "ref-f8753e1ea7c760da2bd8"
+      }
+    }
+  }
+}

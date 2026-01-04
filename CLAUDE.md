@@ -4,20 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ebook-mechanic-cli is a CLI tool for ebook processing and management, written in Go.
+ebook-mechanic-cli is a dual-mode (CLI/TUI) tool for ebook processing and management, written in Go.
 
 ## Development Commands
 
 ### Build
 
 ```bash
-go build -o ebook-mechanic
+go build ./cmd/ebm
 ```
 
 ### Run
 
 ```bash
-go run main.go [command] [flags]
+# Run TUI
+go run ./cmd/ebm
+
+# Run CLI command
+go run ./cmd/ebm validate test.epub
 ```
 
 ### Testing
@@ -32,9 +36,6 @@ go test -cover ./...
 # Run a specific test
 go test -run TestName ./path/to/package
 
-# Run tests with verbose output
-go test -v ./...
-
 # Generate coverage report
 go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
@@ -43,9 +44,6 @@ go tool cover -html=coverage.out
 ### Linting
 
 ```bash
-# Install golangci-lint if not already installed
-# go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-
 golangci-lint run
 ```
 
@@ -53,36 +51,35 @@ golangci-lint run
 
 ```bash
 # Linux
-GOOS=linux GOARCH=amd64 go build -o ebook-mechanic-linux
+GOOS=linux GOARCH=amd64 go build -o build/ebm-linux ./cmd/ebm
 
 # macOS
-GOOS=darwin GOARCH=amd64 go build -o ebook-mechanic-darwin
+GOOS=darwin GOARCH=amd64 go build -o build/ebm-darwin ./cmd/ebm
 
 # Windows
-GOOS=windows GOARCH=amd64 go build -o ebook-mechanic-windows.exe
+GOOS=windows GOARCH=amd64 go build -o build/ebm-windows.exe ./cmd/ebm
 ```
 
 ## Project Structure
 
-The project follows standard Go CLI application conventions:
-
-- Build artifacts go to `build/` and `dist/` directories
-- Completion scripts are generated to `completions/` directory
-- HTML reports and markdown reports follow patterns: `*.html` and `ebook_mechanic_report_*.md`
-- Temporary test data is stored in `test-library/`
+- `cmd/ebm/`: Application entry point
+- `internal/cli/`: CLI command implementations (cobra)
+- `internal/tui/`: Interactive TUI implementation (bubbletea)
+- `internal/operations/`: Core business logic and batch processing
+- `internal/config/`: Configuration handling
 
 ## Code Organization
 
 When implementing features:
 
-1. **CLI Framework**: Use a standard CLI framework (cobra, urfave/cli, or similar) for command structure
-2. **Command Pattern**: Organize commands in separate packages under `cmd/` directory
-3. **Core Logic**: Place business logic in dedicated packages separate from CLI handling
-4. **File Processing**: Implement concurrent file processing using goroutines and worker pools for performance
-5. **Error Handling**: Return errors up the call stack; handle at appropriate levels with context
+1. **Dual-Mode**: Ensure features are accessible via both TUI and CLI where appropriate.
+2. **CLI Framework**: Use `cobra` for CLI commands in `internal/cli`.
+3. **TUI Framework**: Use `bubbletea` and `lipgloss` for TUI components in `internal/tui`.
+4. **Shared Logic**: Place core business logic in `internal/operations` to be shared between modes.
+5. **Batch Processing**: Use `internal/operations/batch.go` for concurrent file processing.
 
 ## Development Notes
 
-- The project uses `.gitignore` patterns that exclude IDE-specific directories (`.vscode/`, `.idea/`, `.cursor/`, etc.)
-- Temporary files and debug artifacts are excluded from version control
-- Report files are generated dynamically and not committed
+- **Conventions**: Follow Go standard project layout.
+- **TUI**: Test TUI changes manually as automated testing for TUI is limited.
+- **Performance**: Be mindful of large batch operations; use the worker pool implementation.

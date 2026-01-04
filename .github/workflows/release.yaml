@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build Linux
+        run: GOOS=linux GOARCH=amd64 go build -o ebm-linux-amd64 ./cmd/ebm
+
+      - name: Build macOS Intel
+        run: GOOS=darwin GOARCH=amd64 go build -o ebm-darwin-amd64 ./cmd/ebm
+
+      - name: Build macOS Silicon
+        run: GOOS=darwin GOARCH=arm64 go build -o ebm-darwin-arm64 ./cmd/ebm
+
+      - name: Build Windows
+        run: GOOS=windows GOARCH=amd64 go build -o ebm-windows-amd64.exe ./cmd/ebm
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ebm-linux-amd64
+            ebm-darwin-amd64
+            ebm-darwin-arm64
+            ebm-windows-amd64.exe
+          draft: false
+          prerelease: false
+          generate_release_notes: true

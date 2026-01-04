@@ -22,17 +22,18 @@ type FileItem struct {
 
 // BrowserModel represents the file browser state
 type BrowserModel struct {
-	currentDir   string
-	items        []FileItem
-	selected     int
-	width        int
-	height       int
-	errorMsg     string
-	showHidden   bool
-	filterExts   []string // Filter by extensions (.epub, .pdf)
-	mode         BrowserMode
-	viewportTop  int // For scrolling
-	viewportSize int // Number of visible items
+	currentDir    string
+	items         []FileItem
+	selected      int
+	selectedFiles map[string]bool // Multi-select support: path -> selected
+	width         int
+	height        int
+	errorMsg      string
+	showHidden    bool
+	filterExts    []string // Filter by extensions (.epub, .pdf)
+	mode          BrowserMode
+	viewportTop   int // For scrolling
+	viewportSize  int // Number of visible items
 }
 
 // BrowserMode configures how selection behaves.
@@ -43,6 +44,8 @@ const (
 	BrowserModeFile BrowserMode = iota
 	// BrowserModeBatch selects directories or files for batch operations.
 	BrowserModeBatch
+	// BrowserModeMultiSelect selects multiple files for operations.
+	BrowserModeMultiSelect
 )
 
 // NewBrowserModel creates a new file browser starting at the given directory
@@ -53,6 +56,11 @@ func NewBrowserModel(startDir string, width, height int) BrowserModel {
 // NewBatchBrowserModel creates a browser configured for batch selection.
 func NewBatchBrowserModel(startDir string, width, height int) BrowserModel {
 	return newBrowserModel(startDir, BrowserModeBatch, width, height)
+}
+
+// NewMultiSelectBrowserModel creates a browser configured for multiple file selection.
+func NewMultiSelectBrowserModel(startDir string, width, height int) BrowserModel {
+	return newBrowserModel(startDir, BrowserModeMultiSelect, width, height)
 }
 
 func newBrowserModel(startDir string, mode BrowserMode, width, height int) BrowserModel {
@@ -75,14 +83,15 @@ func newBrowserModel(startDir string, mode BrowserMode, width, height int) Brows
 	}
 
 	m := BrowserModel{
-		currentDir:   startDir,
-		selected:     0,
-		width:        width,
-		height:       height,
-		showHidden:   false,
-		filterExts:   []string{".epub", ".pdf"},
-		mode:         mode,
-		viewportSize: viewportSize,
+		currentDir:    startDir,
+		selected:      0,
+		selectedFiles: make(map[string]bool),
+		width:         width,
+		height:        height,
+		showHidden:    false,
+		filterExts:    []string{".epub", ".pdf"},
+		mode:          mode,
+		viewportSize:  viewportSize,
 	}
 
 	m.loadDirectory()
@@ -169,6 +178,47 @@ func (m BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.loadDirectory()
 			}
 
+		case " ":
+			// Toggle selection of current item
+			if m.selected >= 0 && m.selected < len(m.items) {
+				item := m.items[m.selected]
+				if m.selectedFiles[item.Path] {
+					delete(m.selectedFiles, item.Path)
+				} else {
+					m.selectedFiles[item.Path] = true
+				}
+				// Move to next item after toggling
+				m.selected++
+				if m.selected >= len(m.items) {
+					m.selected = len(m.items) - 1
+				}
+				m.updateViewport()
+			}
+
+		case "a", "ctrl+a":
+			// Select all files (not directories)
+			for _, item := range m.items {
+				if !item.IsDir {
+					m.selectedFiles[item.Path] = true
+				}
+			}
+
+		case "A":
+			// Deselect all
+			m.selectedFiles = make(map[string]bool)
+
+		case "s":
+			// Submit selected files
+			if len(m.selectedFiles) > 0 {
+				paths := make([]string, 0, len(m.selectedFiles))
+				for path := range m.selectedFiles {
+					paths = append(paths, path)
+				}
+				return m, func() tea.Msg {
+					return MultiFileSelectMsg{Paths: paths}
+				}
+			}
+
 		case ".":
 			// Toggle hidden files
 			m.showHidden = !m.showHidden
@@ -228,11 +278,24 @@ func (m BrowserModel) View() string {
 		item := m.items[i]
 		cursor := "  "
 		icon := "📄"
+		checkbox := ""
+
 		if item.IsDir {
 			icon = "📁"
 		}
 
-		line := icon + " " + item.Name
+		// Show checkbox if in multi-select mode
+		if m.mode == BrowserModeMultiSelect {
+			if m.selectedFiles[item.Path] {
+				checkbox = "[✓] "
+			} else if !item.IsDir {
+				checkbox = "[ ] "
+			} else {
+				checkbox = "    " // Indent directories to match files
+			}
+		}
+
+		line := checkbox + icon + " " + item.Name
 		if item.IsDir {
 			line += "/"
 		}
@@ -263,23 +326,29 @@ func (m BrowserModel) View() string {
 		}
 	}
 
-	// File count and filter info in a status bar
+	// File count, filter info, and selection count in a status bar
+	statusParts := []string{
+		"Showing: ",
+		lipgloss.NewStyle().Foreground(styles.ColorInfo).Render(strings.Join(m.filterExts, ", ")),
+		"  │  ",
+		"Items: ",
+		lipgloss.NewStyle().Foreground(styles.ColorInfo).Render(fmt.Sprintf("%d", len(m.items))),
+	}
+	if len(m.selectedFiles) > 0 {
+		statusParts = append(statusParts,
+			"  │  ",
+			"Selected: ",
+			lipgloss.NewStyle().Foreground(styles.ColorSuccess).Render(fmt.Sprintf("%d", len(m.selectedFiles))),
+		)
+	}
+
 	filterInfo := lipgloss.NewStyle().
 		Foreground(styles.ColorMuted).
 		Border(lipgloss.NormalBorder(), true, false, false, false).
 		BorderForeground(styles.ColorMuted).
 		Padding(0, 1).
 		Width(m.width - 8).
-		Render(
-			lipgloss.JoinHorizontal(
-				lipgloss.Left,
-				"Showing: ",
-				lipgloss.NewStyle().Foreground(styles.ColorInfo).Render(strings.Join(m.filterExts, ", ")),
-				"  │  ",
-				"Items: ",
-				lipgloss.NewStyle().Foreground(styles.ColorInfo).Render(fmt.Sprintf("%d", len(m.items))),
-			),
-		)
+		Render(lipgloss.JoinHorizontal(lipgloss.Left, statusParts...))
 
 	// Help text
 	helpBox := lipgloss.NewStyle().
@@ -314,20 +383,27 @@ func (m BrowserModel) View() string {
 }
 
 func (m BrowserModel) helpText() string {
+	line1 := styles.RenderKeyBinding("↑/↓/j/k", "navigate") + "  " +
+		styles.RenderKeyBinding("space", "toggle select") + "  " +
+		styles.RenderKeyBinding("a", "select all") + "  " +
+		styles.RenderKeyBinding("A", "deselect all")
+
+	line2 := ""
 	if m.mode == BrowserModeBatch {
-		return styles.RenderKeyBinding("↑/↓", "navigate") + "  " +
-			styles.RenderKeyBinding("enter", "select") + "  " +
+		line2 = styles.RenderKeyBinding("enter", "select dir") + "  " +
 			styles.RenderKeyBinding("l/right", "open dir") + "  " +
-			styles.RenderKeyBinding("backspace", "parent dir") + "  " +
+			styles.RenderKeyBinding("backspace/h", "parent") + "  " +
+			styles.RenderKeyBinding("s", "submit") + "  " +
+			styles.RenderKeyBinding("esc", "back")
+	} else {
+		line2 = styles.RenderKeyBinding("enter", "select/open") + "  " +
+			styles.RenderKeyBinding("backspace/h", "parent") + "  " +
+			styles.RenderKeyBinding("s", "submit selected") + "  " +
 			styles.RenderKeyBinding(".", "toggle hidden") + "  " +
 			styles.RenderKeyBinding("esc", "back")
 	}
 
-	return styles.RenderKeyBinding("↑/↓", "navigate") + "  " +
-		styles.RenderKeyBinding("enter", "select/open") + "  " +
-		styles.RenderKeyBinding("backspace", "parent dir") + "  " +
-		styles.RenderKeyBinding(".", "toggle hidden") + "  " +
-		styles.RenderKeyBinding("esc", "back")
+	return line1 + "\n" + line2
 }
 
 // loadDirectory loads files and directories from the current directory
@@ -441,6 +517,11 @@ func (m BrowserModel) SelectedPath() string {
 // FileSelectMsg is sent when a file is selected
 type FileSelectMsg struct {
 	Path string
+}
+
+// MultiFileSelectMsg is sent when multiple files are selected
+type MultiFileSelectMsg struct {
+	Paths []string
 }
 
 // DirectorySelectMsg is sent when a directory is selected for batch operations.

@@ -29,7 +29,7 @@ func TestDefaultBatchConfig(t *testing.T) {
 
 func TestNewBatchProcessor(t *testing.T) {
 	config := DefaultBatchConfig()
-	bp := NewBatchProcessor(config)
+	bp := NewBatchProcessor(context.Background(), config)
 
 	if bp == nil {
 		t.Fatal("Expected non-nil batch processor")
@@ -54,7 +54,7 @@ func TestNewBatchProcessor(t *testing.T) {
 
 func TestBatchProcessor_Cancel(t *testing.T) {
 	config := DefaultBatchConfig()
-	bp := NewBatchProcessor(config)
+	bp := NewBatchProcessor(context.Background(), config)
 
 	// Cancel the processor
 	bp.Cancel()
@@ -70,7 +70,7 @@ func TestBatchProcessor_Cancel(t *testing.T) {
 
 func TestBatchProcessor_ProgressChannel(t *testing.T) {
 	config := DefaultBatchConfig()
-	bp := NewBatchProcessor(config)
+	bp := NewBatchProcessor(context.Background(), config)
 
 	ch := bp.ProgressChannel()
 
@@ -203,7 +203,7 @@ func TestResult(t *testing.T) {
 func TestBatchProcessor_ProcessTask_UnknownOperation(t *testing.T) {
 	config := DefaultBatchConfig()
 	config.Timeout = 50 * time.Millisecond
-	bp := NewBatchProcessor(config)
+	bp := NewBatchProcessor(context.Background(), config)
 
 	result := bp.processTask(Task{FilePath: "file.txt", Operation: "unknown"})
 
@@ -219,7 +219,7 @@ func TestBatchProcessor_Execute_ValidateUnsupported(t *testing.T) {
 	config.ProgressRate = 10 * time.Millisecond
 	config.Timeout = 50 * time.Millisecond
 
-	bp := NewBatchProcessor(config)
+	bp := NewBatchProcessor(context.Background(), config)
 	results := bp.Execute([]string{"file1.txt", "file2.txt"}, OperationValidate)
 	bp.Cancel()
 
@@ -244,7 +244,7 @@ func TestBatchProcessor_Execute_RepairUnsupported(t *testing.T) {
 	config.ProgressRate = 10 * time.Millisecond
 	config.Timeout = 50 * time.Millisecond
 
-	bp := NewBatchProcessor(config)
+	bp := NewBatchProcessor(context.Background(), config)
 	results := bp.Execute([]string{"file1.txt"}, OperationRepair)
 	bp.Cancel()
 
@@ -267,7 +267,7 @@ func TestBatchProcessor_Execute_Canceled(t *testing.T) {
 	config.QueueSize = 2
 	config.Timeout = 50 * time.Millisecond
 
-	bp := NewBatchProcessor(config)
+	bp := NewBatchProcessor(context.Background(), config)
 	bp.Cancel()
 
 	results := bp.Execute([]string{"file1.txt", "file2.txt"}, OperationValidate)
@@ -281,7 +281,7 @@ func TestBatchProcessor_ReportProgress(t *testing.T) {
 	config := DefaultBatchConfig()
 	config.ProgressRate = 5 * time.Millisecond
 
-	bp := NewBatchProcessor(config)
+	bp := NewBatchProcessor(context.Background(), config)
 	bp.total = 3
 	bp.completed.Store(1)
 	bp.currentFile.Store("file1.txt")

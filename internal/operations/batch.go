@@ -2,7 +2,10 @@ package operations
 
 import (
 	"context"
+	"io/fs"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +29,100 @@ type BatchConfig struct {
 	QueueSize    int           // Task queue buffer size
 	ProgressRate time.Duration // Progress update frequency
 	Timeout      time.Duration // Per-file operation timeout
+}
+
+// FindFilesOptions configures file discovery for batch operations
+type FindFilesOptions struct {
+	Recursive  bool
+	MaxDepth   int      // -1 for unlimited
+	Extensions []string // e.g., []string{".epub", ".pdf"}
+	Ignore     []string // glob patterns
+}
+
+// FindFiles finds all matching files in the given directory based on options
+func FindFiles(root string, opts FindFilesOptions) ([]string, error) {
+	var files []string
+
+	// Clean root path
+	root = filepath.Clean(root)
+
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Calculate current depth relative to root
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+
+		depth := 0
+		if rel != "." {
+			depth = len(strings.Split(rel, string(filepath.Separator)))
+		}
+
+		// Check max depth
+		if opts.MaxDepth != -1 && depth > opts.MaxDepth {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		// Skip directories if not recursive (beyond the root)
+		if !opts.Recursive && d.IsDir() && path != root {
+			return filepath.SkipDir
+		}
+
+		// Handle ignores
+		for _, pattern := range opts.Ignore {
+			matched, err := filepath.Match(pattern, d.Name())
+			if err == nil && matched {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+
+			// Also try matching the full path
+			matched, err = filepath.Match(pattern, path)
+			if err == nil && matched {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
+
+		// Check if file is of desired extensions
+		if !d.IsDir() {
+			ext := strings.ToLower(filepath.Ext(path))
+			matchExt := false
+			if len(opts.Extensions) == 0 {
+				// Default to EPUB and PDF if none specified
+				matchExt = ext == ".epub" || ext == ".pdf"
+			} else {
+				for _, targetExt := range opts.Extensions {
+					if !strings.HasPrefix(targetExt, ".") {
+						targetExt = "." + targetExt
+					}
+					if ext == strings.ToLower(targetExt) {
+						matchExt = true
+						break
+					}
+				}
+			}
+
+			if matchExt {
+				files = append(files, path)
+			}
+		}
+
+		return nil
+	})
+
+	return files, err
 }
 
 // DefaultBatchConfig returns sensible defaults for batch processing
@@ -72,9 +169,9 @@ type BatchProcessor struct {
 	currentFile atomic.Value // stores string
 }
 
-// NewBatchProcessor creates a new batch processor
-func NewBatchProcessor(config BatchConfig) *BatchProcessor {
-	ctx, cancel := context.WithCancel(context.Background())
+// NewBatchProcessor creates a new batch processor with the given parent context
+func NewBatchProcessor(ctx context.Context, config BatchConfig) *BatchProcessor {
+	ctx, cancel := context.WithCancel(ctx)
 
 	return &BatchProcessor{
 		config:      config,
@@ -115,21 +212,17 @@ func (bp *BatchProcessor) Execute(files []string, operation OperationType) []Res
 
 	// Collect results
 	results := make([]Result, 0, len(files))
-	for i := 0; i < len(files); i++ {
-		select {
-		case result := <-bp.resultQueue:
-			results = append(results, result)
-		case <-bp.ctx.Done():
-			// Collect any remaining results
-			for len(bp.resultQueue) > 0 {
-				results = append(results, <-bp.resultQueue)
-			}
-			return results
-		}
-	}
+	
+	// Wait for all workers to finish in a separate goroutine
+	go func() {
+		wg.Wait()
+		close(bp.resultQueue)
+		bp.Cancel() // Stop progress reporting
+	}()
 
-	// Wait for all workers to finish
-	wg.Wait()
+	for result := range bp.resultQueue {
+		results = append(results, result)
+	}
 
 	return results
 }
@@ -198,6 +291,7 @@ func (bp *BatchProcessor) processTask(task Task) Result {
 func (bp *BatchProcessor) reportProgress() {
 	ticker := time.NewTicker(bp.config.ProgressRate)
 	defer ticker.Stop()
+	defer close(bp.progressCh)
 
 	for {
 		select {
@@ -238,8 +332,11 @@ func (bp *BatchProcessor) Cancel() {
 
 // BatchResult contains aggregated results of a batch operation
 type BatchResult struct {
-	Successful []Result
-	Failed     []Result
+	Valid      []Result // Processed successfully and found valid
+	Invalid    []Result // Processed successfully but found invalid
+	Errored    []Result // Failed to process due to system/IO error
+	Successful []Result // Deprecated: use Valid
+	Failed     []Result // Deprecated: use Invalid or Errored
 	Duration   time.Duration
 	Total      int
 }
@@ -247,16 +344,37 @@ type BatchResult struct {
 // AggregateResults aggregates a list of results into a BatchResult
 func AggregateResults(results []Result, duration time.Duration) BatchResult {
 	br := BatchResult{
-		Successful: make([]Result, 0),
-		Failed:     make([]Result, 0),
+		Valid:      make([]Result, 0),
+		Invalid:    make([]Result, 0),
+		Errored:    make([]Result, 0),
+		Successful: make([]Result, 0), // Keeping for backward compatibility for now
+		Failed:     make([]Result, 0), // Keeping for backward compatibility for now
 		Duration:   duration,
 		Total:      len(results),
 	}
 
 	for _, r := range results {
 		if r.Error != nil {
+			br.Errored = append(br.Errored, r)
 			br.Failed = append(br.Failed, r)
+		} else if r.Report != nil {
+			if r.Report.IsValid {
+				br.Valid = append(br.Valid, r)
+				br.Successful = append(br.Successful, r)
+			} else {
+				br.Invalid = append(br.Invalid, r)
+				br.Failed = append(br.Failed, r)
+			}
+		} else if r.Repair != nil {
+			if r.Repair.Success {
+				br.Valid = append(br.Valid, r)
+				br.Successful = append(br.Successful, r)
+			} else {
+				br.Invalid = append(br.Invalid, r)
+				br.Failed = append(br.Failed, r)
+			}
 		} else {
+			// Fallback
 			br.Successful = append(br.Successful, r)
 		}
 	}

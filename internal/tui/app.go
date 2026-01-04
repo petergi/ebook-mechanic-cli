@@ -37,6 +37,7 @@ type App struct {
 	selectedFile  string
 	width         int
 	height        int
+	progressCh    <-chan operations.ProgressUpdate
 }
 
 // NewApp creates a new TUI application
@@ -108,6 +109,13 @@ func (a App) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.state = StateBrowser
 			return a, a.browserModel.Init()
 
+		case "multi-validate", "multi-repair":
+			// Show multi-select browser
+			cwd, _ := os.Getwd()
+			a.browserModel = models.NewMultiSelectBrowserModel(cwd, a.width, a.height)
+			a.state = StateBrowser
+			return a, a.browserModel.Init()
+
 		case "batch":
 			// Show directory browser for batch
 			cwd, _ := os.Getwd()
@@ -116,6 +124,7 @@ func (a App) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, a.browserModel.Init()
 
 		case "quit":
+			a.cancel()
 			return a, tea.Quit
 		}
 
@@ -123,6 +132,10 @@ func (a App) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var m tea.Model
 		m, cmd = a.menuModel.Update(msg)
 		a.menuModel = m.(models.MenuModel)
+		if m.(models.MenuModel).Quitting() {
+			a.cancel()
+			return a, tea.Quit
+		}
 	}
 
 	return a, cmd
@@ -146,6 +159,15 @@ func (a App) updateBrowser(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "batch":
 			return a.startBatch(msg.Path)
 		}
+
+	case models.MultiFileSelectMsg:
+		// Multiple files selected, start batch operation
+		menuAction := a.menuModel.SelectedAction()
+		switch menuAction {
+		case "validate", "repair", "batch", "multi-validate", "multi-repair":
+			return a.startBatchWithFiles(msg.Paths, menuAction)
+		}
+
 	case models.DirectorySelectMsg:
 		menuAction := a.menuModel.SelectedAction()
 		if menuAction == "batch" {
@@ -190,6 +212,24 @@ func (a App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, cmd
 		}
 
+	case models.ProgressUpdateMsg:
+		var m tea.Model
+		m, cmd = a.progressModel.Update(msg)
+		a.progressModel = m.(models.ProgressModel)
+		// Continue streaming if we have a channel
+		if a.progressCh != nil {
+			return a, tea.Batch(cmd, batchProgressCmd(a.progressCh))
+		}
+		return a, cmd
+
+	case models.ViewReportMsg:
+		switch result := msg.Result.(type) {
+		case operations.BatchResult:
+			a.reportModel = models.NewBatchReportModel(&result, a.width, a.height)
+			a.state = StateReport
+			return a, a.reportModel.Init()
+		}
+
 	case models.OperationCancelMsg:
 		a.cancel()
 		a.state = StateMenu
@@ -231,16 +271,74 @@ func (a App) startBatch(path string) (tea.Model, tea.Cmd) {
 	a.progressModel = models.NewProgressModel("Batch Processing", path, len(files), a.width, a.height)
 	a.state = StateProgress
 
+	// Start batch processing in a goroutine to not block the UI
+	// and send the result when done.
+	batch := operations.NewBatchProcessor(a.ctx, operations.DefaultBatchConfig())
+	doneCh := make(chan operations.BatchResult)
+	start := time.Now()
+
+	go func() {
+		results := batch.Execute(files, operations.OperationValidate)
+		doneCh <- operations.AggregateResults(results, time.Since(start))
+	}()
+
+	a.progressCh = batch.ProgressChannel()
+
 	return a, tea.Batch(
 		a.progressModel.Init(),
+		// Command to wait for result
 		func() tea.Msg {
-			start := time.Now()
-			batch := operations.NewBatchProcessor(operations.DefaultBatchConfig())
-			results := batch.Execute(files, operations.OperationValidate)
-			return models.OperationDoneMsg{
-				Result: operations.AggregateResults(results, time.Since(start)),
-			}
+			result := <-doneCh
+			return models.OperationDoneMsg{Result: result}
 		},
+		// Command to stream progress
+		batchProgressCmd(a.progressCh),
+	)
+}
+
+func (a App) startBatchWithFiles(files []string, action string) (tea.Model, tea.Cmd) {
+	if len(files) == 0 {
+		return a, nil
+	}
+
+	// Determine operation type
+	var opType operations.OperationType
+	title := "Batch Processing"
+	switch action {
+	case "validate", "multi-validate":
+		opType = operations.OperationValidate
+		title = "Batch Validation"
+	case "repair", "multi-repair":
+		opType = operations.OperationRepair
+		title = "Batch Repair"
+	default:
+		opType = operations.OperationValidate
+	}
+
+	a.progressModel = models.NewProgressModel(title, fmt.Sprintf("%d files", len(files)), len(files), a.width, a.height)
+	a.state = StateProgress
+
+	// Start batch processing in a goroutine
+	batch := operations.NewBatchProcessor(a.ctx, operations.DefaultBatchConfig())
+	doneCh := make(chan operations.BatchResult)
+	start := time.Now()
+
+	go func() {
+		results := batch.Execute(files, opType)
+		doneCh <- operations.AggregateResults(results, time.Since(start))
+	}()
+
+	a.progressCh = batch.ProgressChannel()
+
+	return a, tea.Batch(
+		a.progressModel.Init(),
+		// Command to wait for result
+		func() tea.Msg {
+			result := <-doneCh
+			return models.OperationDoneMsg{Result: result}
+		},
+		// Command to stream progress
+		batchProgressCmd(a.progressCh),
 	)
 }
 
@@ -380,4 +478,14 @@ func Run() error {
 	}
 
 	return nil
+}
+
+func batchProgressCmd(ch <-chan operations.ProgressUpdate) tea.Cmd {
+	return func() tea.Msg {
+		update, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return models.ConvertBatchProgress(update)
+	}
 }

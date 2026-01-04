@@ -118,8 +118,17 @@ install: ## Install dependencies
 	@echo "$(BOLD)$(GREEN)✓ Dependencies installed$(RESET)"
 
 .PHONY: run
-run: ## Run the CLI
-	@echo "$(BOLD)$(RED)Running application...$(RESET)"
+run: ## Run the interactive TUI
+	@echo "$(BOLD)$(RED)Running application (TUI)...$(RESET)"
+	$(GO) run $(CMD_DIR)
+
+.PHONY: run-cli
+run-cli: ## Run the CLI validation (usage: make run-cli RUN_ARGS="path/to/file")
+	@echo "$(BOLD)$(RED)Running application (CLI)...$(RESET)"
+	@if [ -z "$(RUN_ARGS)" ]; then \
+		echo "$(BOLD)$(YELLOW)Usage: make run-cli RUN_ARGS=\"path/to/file\"$(RESET)"; \
+		exit 1; \
+	fi
 	$(GO) run $(CMD_DIR) $(RUN_ARGS)
 
 .PHONY: check
