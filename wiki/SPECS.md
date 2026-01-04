@@ -5,4 +5,6 @@ ebook-mechanic-lib.
 
 ## Reference
 
-See the library specs for the authoritative rules and constraints.
+See the library specs for the authoritative rules and constraints:
+
+- https://github.com/petergi/ebook-mechanic-lib/tree/master/docs/specs
