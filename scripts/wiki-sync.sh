@@ -75,7 +75,7 @@ create_sidebar() {
 
 ### Architecture
 * **[Architecture](ARCHITECTURE)** - System design
-* **[ADR Index](adr/README)** - Architecture Decision Records
+* **[ADR Index](ADR_INDEX)** - Architecture Decision Records
 
 ### Validation and Repair
 * **[Specs](SPECS)** - EPUB and PDF specs
