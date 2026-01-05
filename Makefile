@@ -148,7 +148,7 @@ docs-links: ## Validate local markdown links
 docs-lint: ## Lint markdown files (requires markdownlint-cli2)
 	@echo "$(BOLD)$(BLUE)Linting markdown...$(RESET)"
 	@if command -v markdownlint-cli2 > /dev/null 2>&1; then \
-		markdownlint-cli2 "**/*.md" --config .markdownlint.yaml; \
+		markdownlint-cli2 "**/*.md" --config .markdownlint.yaml --fix; \
 		printf "%b\n" "$(BOLD)$(GREEN)✓ Markdown lint complete$(RESET)"; \
 	else \
 		printf "%b\n" "$(BOLD)$(RED)✗ markdownlint-cli2 not installed. Install with: npm i -g markdownlint-cli2$(RESET)"; \

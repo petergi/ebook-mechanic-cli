@@ -46,6 +46,11 @@ ebook-mechanic-cli/
 │   └── ebm/
 │       └── main.go
 ├── internal/
+│   ├── cli/
+│   │   ├── root.go
+│   │   ├── validate.go
+│   │   ├── repair.go
+│   │   └── batch.go
 │   ├── tui/
 │   │   ├── models/
 │   │   ├── styles/
@@ -63,17 +68,18 @@ ebook-mechanic-cli/
 
 ### Clear Layering
 
-Three distinct layers with clear responsibilities:
+Four distinct layers with clear responsibilities:
 
-1. **TUI Layer** (`internal/tui/`): All Bubbletea models and UI logic
-2. **Operations Layer** (`internal/operations/`): Business logic and ebook-mechanic-lib integration
-3. **Utilities** (`pkg/utils/`): Reusable helpers (exported as they may be useful externally)
+1. **CLI Layer** (`internal/cli/`): Cobra commands and flags for scriptable interface
+2. **TUI Layer** (`internal/tui/`): Bubbletea models and UI logic for interactive interface
+3. **Operations Layer** (`internal/operations/`): Shared business logic and ebook-mechanic-lib integration
+4. **Utilities** (`pkg/utils/`): Reusable helpers (exported as they may be useful externally)
 
 This separation ensures:
 
-- UI can be tested independently of operations
-- Operations can be used from different UIs (future: web, API)
-- Utilities can be easily unit tested
+- UI (TUI) and CLI can be maintained independently
+- Both interfaces share the same robust operations logic
+- Operations can be tested in isolation
 
 ### Internal Package Pattern
 

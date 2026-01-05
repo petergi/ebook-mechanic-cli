@@ -48,6 +48,7 @@ ebm
 ```
 
 **Key Bindings:**
+
 - `↑`/`↓` or `j`/`k`: Navigate menus and lists
 - `Space`: Toggle file selection (Multi-Select mode)
 - `Enter`: Select item / Confirm action
@@ -73,6 +74,7 @@ ebm ./library            # Batch validate directory
 #### Detailed Reporting
 
 Batch reports now categorize files into three groups:
+
 - **Valid**: Passed validation successfully.
 - **Invalid**: Failed validation (e.g., corrupt zip, missing manifest).
 - **System Errors**: IO errors, permission denied, etc.
@@ -80,11 +82,13 @@ Batch reports now categorize files into three groups:
 #### Command Examples
 
 Validate with JSON output:
+
 ```bash
 ebm validate book.epub --format json --output report.json
 ```
 
 Filter issues by severity:
+
 ```bash
 ebm validate book.epub --min-severity error
 ```
@@ -92,11 +96,13 @@ ebm validate book.epub --min-severity error
 #### Repair
 
 Repair a file to a new location:
+
 ```bash
 ebm repair book.epub --output fixed_book.epub
 ```
 
 Repair in-place with a backup:
+
 ```bash
 ebm repair book.epub --in-place --backup
 ```
@@ -104,16 +110,19 @@ ebm repair book.epub --in-place --backup
 #### Batch Processing
 
 Batch validate a directory with 8 workers:
+
 ```bash
 ebm batch validate ./library --jobs 8
 ```
 
 Batch repair recursively, ignoring "draft" folders:
+
 ```bash
 ebm batch repair ./library --in-place --backup --ignore "*/draft/*"
 ```
 
 Limit batch processing depth and extensions:
+
 ```bash
 ebm batch validate ./library --max-depth 2 --ext .epub
 ```

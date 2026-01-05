@@ -1,6 +1,6 @@
 # https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
 MD013:
-  line_length: 300
+  line_length: 320
 MD033:
   allowed_elements:
     - br

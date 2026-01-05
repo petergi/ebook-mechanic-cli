@@ -7,4 +7,4 @@ ebook-mechanic-lib.
 
 See the library specs for the authoritative rules and constraints:
 
-- https://github.com/petergi/ebook-mechanic-lib/tree/master/docs/specs
+- <https://github.com/petergi/ebook-mechanic-lib/tree/master/docs/specs>

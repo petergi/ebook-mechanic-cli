@@ -5,7 +5,7 @@ bindings.
 
 ## Binary
 
-```
+```sh
 ebm-cli
 ```
 
