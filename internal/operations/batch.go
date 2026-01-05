@@ -212,7 +212,7 @@ func (bp *BatchProcessor) Execute(files []string, operation OperationType) []Res
 
 	// Collect results
 	results := make([]Result, 0, len(files))
-	
+
 	// Wait for all workers to finish in a separate goroutine
 	go func() {
 		wg.Wait()

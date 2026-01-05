@@ -426,3 +426,176 @@ func extractOperationDoneFromMsg(t *testing.T, msg tea.Msg) models.OperationDone
 	t.Fatalf("expected OperationDoneMsg, got %T", msg)
 	return models.OperationDoneMsg{}
 }
+
+func TestCollectBatchFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "1.epub"), []byte("t"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "2.pdf"), []byte("t"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "skip.txt"), []byte("t"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(tmpDir, ".hidden"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, ".hidden", "3.epub"), []byte("t"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := collectBatchFiles(tmpDir)
+	if err != nil {
+		t.Fatalf("collectBatchFiles failed: %v", err)
+	}
+
+	if len(files) != 2 {
+		t.Errorf("Expected 2 files, got %d: %v", len(files), files)
+	}
+}
+
+func TestApp_startBatchWithFiles(t *testing.T) {
+	app := NewApp()
+	files := []string{"1.epub", "2.epub"}
+
+	t.Run("validate", func(t *testing.T) {
+		model, cmd := app.startBatchWithFiles(files, "validate")
+		updated := model.(App)
+		if updated.state != StateProgress {
+			t.Error("Expected StateProgress")
+		}
+		if cmd == nil {
+			t.Error("Expected command")
+		}
+	})
+
+	t.Run("repair", func(t *testing.T) {
+		model, _ := app.startBatchWithFiles(files, "repair")
+		updated := model.(App)
+		if !strings.Contains(updated.progressModel.View(), "Repair") {
+			t.Error("Expected repair in progress view")
+		}
+	})
+}
+
+func TestAppUpdateMenu_MultiSelectActions(t *testing.T) {
+	tests := []struct {
+		name   string
+		action string
+	}{
+		{"multi-validate", "multi-validate"},
+		{"multi-repair", "multi-repair"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := NewApp()
+			model, _ := app.Update(models.MenuSelectMsg{Action: tt.action})
+			updated := model.(App)
+
+			if updated.state != StateBrowser {
+				t.Errorf("expected state to be StateBrowser, got %v", updated.state)
+			}
+			if updated.browserModel.SelectedPath() == "" {
+				// Check that selected path is empty (or whatever is expected)
+				// but don't leave empty if block
+				t.Log("Selected path is empty as expected")
+			}
+		})
+	}
+}
+
+func TestAppUpdateBrowser_MultiFileSelect(t *testing.T) {
+	app := NewApp()
+	app.state = StateBrowser
+
+	msg := models.MultiFileSelectMsg{
+		Paths: []string{"1.epub", "2.epub"},
+	}
+
+	model, _ := app.Update(msg)
+	updated := model.(App)
+
+	if updated.state != StateProgress {
+		t.Errorf("expected state to be StateProgress, got %v", updated.state)
+	}
+}
+
+func TestAppUpdateProgress_Streaming(t *testing.T) {
+	app := NewApp()
+	app.state = StateProgress
+	app.progressCh = make(chan operations.ProgressUpdate, 1)
+
+	msg := models.ProgressUpdateMsg{
+		Current: 1,
+		Total:   2,
+	}
+
+	model, cmd := app.Update(msg)
+	updated := model.(App)
+
+	if updated.state != StateProgress {
+		t.Error("Expected to stay in StateProgress")
+	}
+	if cmd == nil {
+		t.Error("Expected continuation command for streaming")
+	}
+}
+
+func TestAppUpdateProgress_ViewReport(t *testing.T) {
+	app := NewApp()
+	app.state = StateProgress
+
+	result := operations.BatchResult{Total: 1}
+	msg := models.ViewReportMsg{Result: result}
+
+	model, _ := app.Update(msg)
+	updated := model.(App)
+
+	if updated.state != StateReport {
+		t.Errorf("Expected StateReport, got %v", updated.state)
+	}
+}
+
+func TestBatchProgressCmd(t *testing.T) {
+	ch := make(chan operations.ProgressUpdate, 1)
+	ch <- operations.ProgressUpdate{Completed: 1, Total: 1}
+
+	cmd := batchProgressCmd(ch)
+	msg := cmd()
+
+	updateMsg, ok := msg.(models.ProgressUpdateMsg)
+	if !ok {
+		t.Fatalf("Expected ProgressUpdateMsg, got %T", msg)
+	}
+	if updateMsg.Current != 1 {
+		t.Errorf("Expected current 1, got %d", updateMsg.Current)
+	}
+
+	close(ch)
+	msg = cmd()
+	if msg != nil {
+		t.Error("Expected nil msg for closed channel")
+	}
+}
+
+func TestIsEbookFile(t *testing.T) {
+	tests := []struct {
+		path     string
+		expected bool
+	}{
+		{"test.epub", true},
+		{"TEST.EPUB", true},
+		{"test.pdf", true},
+		{"test.txt", false},
+		{"noext", false},
+	}
+
+	for _, tt := range tests {
+		got := isEbookFile(tt.path)
+		if got != tt.expected {
+			t.Errorf("isEbookFile(%q) = %v, want %v", tt.path, got, tt.expected)
+		}
+	}
+}

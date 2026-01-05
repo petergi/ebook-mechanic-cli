@@ -112,7 +112,7 @@ func runRepair(ctx context.Context, filePath string, flags *repairFlags, rootFla
 
 	// Exit with non-zero if repair failed (but don't return error to avoid double printing)
 	if !result.Success {
-		os.Exit(1)
+		osExit(1)
 	}
 
 	return nil

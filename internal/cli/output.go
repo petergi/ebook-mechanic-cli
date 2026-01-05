@@ -264,7 +264,7 @@ func (f *TextFormatter) FormatBatchValidation(result *operations.BatchResult, su
 	// Problematic files (Invalid or Errored)
 	if !summaryOnly && (len(result.Invalid) > 0 || len(result.Errored) > 0) {
 		b.WriteString(f.subheader("Issues Found"))
-		
+
 		// List system errors first
 		for _, r := range result.Errored {
 			fileName := filepath.Base(r.FilePath)
@@ -317,7 +317,7 @@ func (f *TextFormatter) FormatBatchRepair(result *operations.BatchResult, summar
 	// Problematic files
 	if !summaryOnly && (len(result.Invalid) > 0 || len(result.Errored) > 0) {
 		b.WriteString(f.subheader("Issues Found"))
-		
+
 		// List system errors first
 		for _, r := range result.Errored {
 			fileName := filepath.Base(r.FilePath)

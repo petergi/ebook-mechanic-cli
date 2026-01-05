@@ -2,9 +2,12 @@ package models
 
 import (
 	"errors"
+	"os"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/petergi/ebook-mechanic-cli/internal/operations"
 	"github.com/petergi/ebook-mechanic-lib/pkg/ebmlib"
 )
 
@@ -32,7 +35,7 @@ func TestNewReportModel(t *testing.T) {
 		t.Errorf("Expected default height 24, got %d", m.height)
 	}
 
-	expectedViewportSize := 24 - 12 // height - 12
+	expectedViewportSize := 5 // 24 - 32 < 5, so min 5
 	if m.viewportSize != expectedViewportSize {
 		t.Errorf("Expected viewportSize %d, got %d", expectedViewportSize, m.viewportSize)
 	}
@@ -100,7 +103,7 @@ func TestReportModel_Update_WindowSize(t *testing.T) {
 		t.Errorf("Expected height 40, got %d", m.height)
 	}
 
-	expectedViewportSize := 40 - 12
+	expectedViewportSize := 40 - 32 // offset for validation
 	if m.viewportSize != expectedViewportSize {
 		t.Errorf("Expected viewportSize %d, got %d", expectedViewportSize, m.viewportSize)
 	}
@@ -603,26 +606,167 @@ func TestReportModel_EmptyReportDisplay(t *testing.T) {
 	}
 }
 
-func TestReportModel_MultipleIssueTypes(t *testing.T) {
+func TestNewBatchReportModel(t *testing.T) {
+	result := &operations.BatchResult{
+		Total:   5,
+		Valid:   []operations.Result{{FilePath: "1.epub"}},
+		Invalid: []operations.Result{{FilePath: "2.epub"}},
+	}
+
+	m := NewBatchReportModel(result, 80, 24)
+
+	if m.batchResult != result {
+		t.Error("Expected batchResult to be set")
+	}
+
+	if m.reportType != "batch" {
+		t.Errorf("Expected reportType 'batch', got '%s'", m.reportType)
+	}
+
+	if m.selectedFilter != 0 {
+		t.Errorf("Expected default filter 0 (Invalid), got %d", m.selectedFilter)
+	}
+}
+
+func TestReportModel_Update_SaveReport_Validation(t *testing.T) {
+	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
+	m := NewReportModel(report, 80, 24)
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	msg := cmd()
+	saveMsg := msg.(ReportSaveMsg)
+	if saveMsg.Error != nil {
+		t.Errorf("Save validation failed: %v", saveMsg.Error)
+	}
+	_ = os.RemoveAll("reports")
+}
+
+func TestReportModel_Update_SaveReport_Repair(t *testing.T) {
+	result := &ebmlib.RepairResult{Success: true}
+	m := NewRepairReportModel(result, 80, 24)
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	msg := cmd()
+	saveMsg := msg.(ReportSaveMsg)
+	if saveMsg.Error != nil {
+		t.Errorf("Save repair failed: %v", saveMsg.Error)
+	}
+	_ = os.RemoveAll("reports")
+}
+
+func TestReportModel_Update_SaveReport_Batch(t *testing.T) {
+	result := &operations.BatchResult{Total: 1, Valid: []operations.Result{{FilePath: "v.epub"}}}
+	m := NewBatchReportModel(result, 80, 24)
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	msg := cmd()
+	saveMsg := msg.(ReportSaveMsg)
+	if saveMsg.Error != nil {
+		t.Errorf("Save batch failed: %v", saveMsg.Error)
+	}
+	_ = os.RemoveAll("reports")
+}
+
+func TestReportModel_View_Batch_Filters(t *testing.T) {
+	result := &operations.BatchResult{
+		Total:   3,
+		Valid:   []operations.Result{{FilePath: "v.epub"}},
+		Invalid: []operations.Result{{FilePath: "i.epub"}},
+		Errored: []operations.Result{{FilePath: "e.epub", Error: errors.New("err")}},
+	}
+
+	m := NewBatchReportModel(result, 80, 24)
+
+	filters := []int{0, 1, 2, 3} // Invalid, Errored, Valid, All
+	for _, f := range filters {
+		m.selectedFilter = f
+		view := m.View()
+		if view == "" {
+			t.Errorf("Empty view for filter %d", f)
+		}
+	}
+}
+
+func TestReportModel_Update_Filters(t *testing.T) {
+	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
+	m := NewReportModel(report, 80, 24)
+
+	keys := []string{"1", "2", "3", "4"}
+	for _, k := range keys {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)})
+		m = updated.(ReportModel)
+	}
+}
+
+func TestReportModel_View_NilBatch(t *testing.T) {
+	m := ReportModel{reportType: "batch", batchResult: nil}
+	view := m.View()
+	if !strings.Contains(view, "No batch result") {
+		t.Error("Expected no batch result message")
+	}
+}
+
+func TestReportModel_calculateViewportSize(t *testing.T) {
+	types := []string{"validation", "batch", "repair", "unknown"}
+	for _, ty := range types {
+		size := calculateViewportSize(100, ty)
+		if size < 5 {
+			t.Errorf("Viewport size too small for %s: %d", ty, size)
+		}
+	}
+}
+
+func TestReportModel_formatBatchItem(t *testing.T) {
+	report := &ebmlib.ValidationReport{FilePath: "test.epub"}
+	m := NewReportModel(report, 80, 24)
+
+	res := operations.Result{FilePath: "test.epub"}
+
+	s := m.formatBatchItem(res, "valid")
+	if s == "" {
+		t.Error("Empty format for valid")
+	}
+
+	s = m.formatBatchItem(res, "invalid")
+	if s == "" {
+		t.Error("Empty format for invalid")
+	}
+
+	s = m.formatBatchItem(res, "errored")
+	if s == "" {
+		t.Error("Empty format for errored")
+	}
+}
+
+func TestReportSaveMsg(t *testing.T) {
+	msg := ReportSaveMsg{Path: "p", Error: errors.New("e")}
+	if msg.Path != "p" || msg.Error.Error() != "e" {
+		t.Error("ReportSaveMsg failed")
+	}
+}
+
+func TestReportModel_Update_SaveReport_Validation_WithErrors(t *testing.T) {
 	report := &ebmlib.ValidationReport{
 		FilePath: "test.epub",
 		IsValid:  false,
-		Errors: []ebmlib.ValidationError{
-			{Code: "ERROR1", Message: "Error 1", Severity: ebmlib.SeverityError},
-		},
-		Warnings: []ebmlib.ValidationError{
-			{Code: "WARN1", Message: "Warning 1", Severity: ebmlib.SeverityWarning},
-		},
-		Info: []ebmlib.ValidationError{
-			{Code: "INFO1", Message: "Info 1", Severity: ebmlib.SeverityInfo},
-		},
+		Errors:   []ebmlib.ValidationError{{Code: "E", Message: "M"}},
 	}
-
 	m := NewReportModel(report, 80, 24)
 
-	view := m.View()
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	msg := cmd()
+	saveMsg := msg.(ReportSaveMsg)
+	if saveMsg.Error != nil {
+		t.Errorf("Save validation with errors failed: %v", saveMsg.Error)
+	}
+	_ = os.RemoveAll("reports")
+}
 
-	if view == "" {
-		t.Error("Expected non-empty view with mixed issue types")
+func TestReportModel_Update_ReportSaveMsg(t *testing.T) {
+	m := NewReportModel(nil, 80, 24)
+	updated, _ := m.Update(ReportSaveMsg{Path: "saved.txt"})
+	m = updated.(ReportModel)
+	if m.savedReportPath != "saved.txt" {
+		t.Error("Expected savedReportPath to be updated")
 	}
 }

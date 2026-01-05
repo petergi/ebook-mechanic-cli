@@ -94,16 +94,12 @@ func (f *SeverityFilter) FilterReport(report *ebmlib.ValidationReport) *ebmlib.V
 
 	// Filter warnings
 	if f.shouldInclude(SeverityWarning) {
-		for _, warn := range report.Warnings {
-			filtered.Warnings = append(filtered.Warnings, warn)
-		}
+		filtered.Warnings = append(filtered.Warnings, report.Warnings...)
 	}
 
 	// Filter info
 	if f.shouldInclude(SeverityInfo) {
-		for _, info := range report.Info {
-			filtered.Info = append(filtered.Info, info)
-		}
+		filtered.Info = append(filtered.Info, report.Info...)
 	}
 
 	return filtered

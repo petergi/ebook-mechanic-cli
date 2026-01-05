@@ -500,3 +500,26 @@ func TestProgressBarStyles(t *testing.T) {
 		t.Error("Expected ProgressBarEmptyStyle to render non-empty string")
 	}
 }
+
+func TestRenderHyperlink(t *testing.T) {
+	url := "https://example.com"
+	text := "Example"
+	got := RenderHyperlink(url, text)
+
+	if !strings.Contains(got, url) {
+		t.Errorf("Hyperlink does not contain url: %s", got)
+	}
+	if !strings.Contains(got, text) {
+		t.Errorf("Hyperlink does not contain text: %s", got)
+	}
+}
+
+func TestRenderStyledHyperlink(t *testing.T) {
+	url := "https://example.com"
+	text := "Example"
+	got := RenderStyledHyperlink(url, text)
+
+	if got == "" {
+		t.Error("Styled hyperlink is empty")
+	}
+}

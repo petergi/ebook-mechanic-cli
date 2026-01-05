@@ -7,6 +7,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// osExit is a copy of os.Exit that can be mocked in tests
+var osExit = os.Exit
+
 // RootFlags contains global flags shared across all commands
 type RootFlags struct {
 	Format      string
@@ -72,7 +75,7 @@ Validate and repair EPUB and PDF files with comprehensive reporting.
 		info, err := os.Stat(target)
 		if err != nil {
 			// If not a file/dir, and looks like a flag or unknown command, show help/error
-			return fmt.Errorf("unknown command or file: %q\n\nRun 'ebm --help' for usage.", target)
+			return fmt.Errorf("unknown command or file: %q\n\nRun 'ebm --help' for usage", target)
 		}
 
 		// If it's a directory, run batch validate
@@ -91,7 +94,7 @@ Validate and repair EPUB and PDF files with comprehensive reporting.
 			// Let's rely on the fact that we can reuse the logic but we need to initialize flags manually
 			// or better: just invoke the validate/batch command explicitly?
 			// Cobra doesn't easily let us "redirect" to another command object's RunE without parsing its flags.
-			
+
 			// Simpler approach: Call the logic function directly
 			// We need to handle the "jobs" default logic which is inside the flag definition usually.
 			// Let's update runBatchValidate to handle 0 jobs = NumCPU

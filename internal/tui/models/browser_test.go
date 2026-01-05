@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -576,14 +577,101 @@ func TestBrowserModel_View(t *testing.T) {
 	}
 }
 
+func TestNewMultiSelectBrowserModel(t *testing.T) {
+	m := NewMultiSelectBrowserModel(t.TempDir(), 80, 24)
+	if m.mode != BrowserModeMultiSelect {
+		t.Errorf("Expected BrowserModeMultiSelect, got %v", m.mode)
+	}
+}
+
 func TestBrowserModel_Init(t *testing.T) {
-	tmpDir := createTestDirectory(t)
+	m := NewBrowserModel(t.TempDir(), 80, 24)
+	if cmd := m.Init(); cmd != nil {
+		t.Error("Expected nil Init command")
+	}
+}
+
+func TestBrowserModel_Update_Quit(t *testing.T) {
+	m := NewBrowserModel(t.TempDir(), 80, 24)
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if cmd == nil {
+		t.Fatal("Expected command for Esc")
+	}
+	msg := cmd()
+	if _, ok := msg.(BackToMenuMsg); !ok {
+		t.Errorf("Expected BackToMenuMsg, got %T", msg)
+	}
+}
+
+func TestBrowserModel_Update_ToggleSelect(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "test.epub"), []byte("t"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	
+	m := NewMultiSelectBrowserModel(tmpDir, 80, 24)
+		
+
+		// Find the file item
+
+		var fileIdx = -1
+
+		for i, item := range m.items {
+
+			if !item.IsDir {
+
+	
+			fileIdx = i
+			break
+		}
+	}
+
+	if fileIdx == -1 {
+		t.Skip("No file found to test selection")
+	}
+
+	m.selected = fileIdx
+
+	// Toggle select with space
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = updated.(BrowserModel)
+
+	if !m.selectedFiles[m.items[fileIdx].Path] {
+		t.Error("File should be selected")
+	}
+}
+
+func TestBrowserModel_Update_Scrolling(t *testing.T) {
+
+	tmpDir := t.TempDir()
+
+	// Create 20 files
+
+	for i := 0; i < 20; i++ {
+
+		if err := os.WriteFile(filepath.Join(tmpDir, fmt.Sprintf("%d.epub", i)), []byte("t"), 0644); err != nil {
+
+			t.Fatal(err)
+
+		}
+
+	}
+
+	
+
 	m := NewBrowserModel(tmpDir, 80, 24)
 
-	cmd := m.Init()
 
-	if cmd != nil {
-		t.Error("Expected Init to return nil command")
+	m.viewportSize = 5
+
+	// Scroll down
+	for i := 0; i < 10; i++ {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m = updated.(BrowserModel)
+	}
+
+	if m.viewportTop == 0 {
+		t.Error("Viewport should have scrolled")
 	}
 }
 

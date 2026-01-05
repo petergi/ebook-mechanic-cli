@@ -171,8 +171,8 @@ func TestProgressModel_Update_EnterKey_WhenDone(t *testing.T) {
 	}
 
 	msg := cmd()
-	if _, ok := msg.(BackToMenuMsg); !ok {
-		t.Error("Expected BackToMenuMsg")
+	if _, ok := msg.(ViewReportMsg); !ok {
+		t.Error("Expected ViewReportMsg")
 	}
 }
 

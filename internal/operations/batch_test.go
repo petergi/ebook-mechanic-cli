@@ -2,9 +2,14 @@ package operations
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/petergi/ebook-mechanic-lib/pkg/ebmlib"
 )
 
 func TestDefaultBatchConfig(t *testing.T) {
@@ -79,31 +84,118 @@ func TestBatchProcessor_ProgressChannel(t *testing.T) {
 	}
 }
 
-func TestAggregateResults(t *testing.T) {
+func TestFindFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a nested structure
+	// root/
+	//   book1.epub
+	//   book2.pdf
+	//   other.txt
+	//   subdir/
+	//     book3.epub
+	//     nested/
+	//       book4.pdf
+
+	if err := os.MkdirAll(filepath.Join(tmpDir, "subdir", "nested"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "book1.epub"), []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "book2.pdf"), []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "other.txt"), []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "subdir", "book3.epub"), []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "subdir", "nested", "book4.pdf"), []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name     string
+		opts     FindFilesOptions
+		expected int
+	}{
+		{"Recursive all", FindFilesOptions{Recursive: true, MaxDepth: -1}, 4},
+		{"Non-recursive", FindFilesOptions{Recursive: false, MaxDepth: -1}, 2},
+		{"Max depth 1", FindFilesOptions{Recursive: true, MaxDepth: 1}, 2},
+		{"Extensions filter", FindFilesOptions{Recursive: true, MaxDepth: -1, Extensions: []string{".epub"}}, 2},
+		{"Ignore pattern", FindFilesOptions{Recursive: true, MaxDepth: -1, Ignore: []string{"subdir"}}, 2},
+		{"Multiple extensions", FindFilesOptions{Recursive: true, MaxDepth: -1, Extensions: []string{"epub", "pdf"}}, 4},
+		{"Ignore file pattern", FindFilesOptions{Recursive: true, MaxDepth: -1, Ignore: []string{"book1.epub"}}, 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			files, err := FindFiles(tmpDir, tt.opts)
+			if err != nil {
+				t.Fatalf("FindFiles failed: %v", err)
+			}
+			if len(files) != tt.expected {
+				t.Errorf("Expected %d files, got %d: %v", tt.expected, len(files), files)
+			}
+		})
+	}
+
+	t.Run("Extensions without dots", func(t *testing.T) {
+		files, _ := FindFiles(tmpDir, FindFilesOptions{Recursive: true, MaxDepth: -1, Extensions: []string{"epub"}})
+		if len(files) != 2 {
+			t.Errorf("Expected 2 files, got %d", len(files))
+		}
+	})
+
+	t.Run("Ignore directory", func(t *testing.T) {
+		files, _ := FindFiles(tmpDir, FindFilesOptions{Recursive: true, MaxDepth: -1, Ignore: []string{"subdir"}})
+		if len(files) != 2 {
+			t.Errorf("Expected 2 files, got %d", len(files))
+		}
+	})
+
+	t.Run("No extensions filter", func(t *testing.T) {
+		files, _ := FindFiles(tmpDir, FindFilesOptions{Recursive: true, MaxDepth: -1, Extensions: []string{}})
+		if len(files) != 4 {
+			t.Errorf("Expected 4 files, got %d", len(files))
+		}
+	})
+}
+
+func TestBatchProcessor_ProgressAndCancel(t *testing.T) {
+	config := DefaultBatchConfig()
+	config.NumWorkers = 1
+	bp := NewBatchProcessor(context.Background(), config)
+
+	if bp.ProgressChannel() == nil {
+		t.Error("Expected ProgressChannel")
+	}
+
+	bp.Cancel()
+	// bp.ctx should be cancelled
+}
+
+func TestAggregateResults_Detailed(t *testing.T) {
 	results := []Result{
-		{FilePath: "file1.epub", Error: nil},
-		{FilePath: "file2.epub", Error: nil},
-		{FilePath: "file3.epub", Error: context.DeadlineExceeded},
-		{FilePath: "file4.epub", Error: nil},
+		{FilePath: "valid.epub", Report: &ebmlib.ValidationReport{IsValid: true}},
+		{FilePath: "invalid.epub", Report: &ebmlib.ValidationReport{IsValid: false}},
+		{FilePath: "system_err.epub", Error: errors.New("io error")},
+		{FilePath: "repair_ok.epub", Repair: &ebmlib.RepairResult{Success: true}},
+		{FilePath: "repair_fail.epub", Repair: &ebmlib.RepairResult{Success: false}},
 	}
 
-	duration := 5 * time.Second
-	batchResult := AggregateResults(results, duration)
+	br := AggregateResults(results, time.Second)
 
-	if batchResult.Total != 4 {
-		t.Errorf("Expected Total to be 4, got %d", batchResult.Total)
+	if len(br.Valid) != 2 { // valid.epub, repair_ok.epub
+		t.Errorf("Expected 2 valid, got %d", len(br.Valid))
 	}
-
-	if len(batchResult.Successful) != 3 {
-		t.Errorf("Expected 3 successful results, got %d", len(batchResult.Successful))
+	if len(br.Invalid) != 2 { // invalid.epub, repair_fail.epub
+		t.Errorf("Expected 2 invalid, got %d", len(br.Invalid))
 	}
-
-	if len(batchResult.Failed) != 1 {
-		t.Errorf("Expected 1 failed result, got %d", len(batchResult.Failed))
-	}
-
-	if batchResult.Duration != duration {
-		t.Errorf("Expected duration to be %v, got %v", duration, batchResult.Duration)
+	if len(br.Errored) != 1 { // system_err.epub
+		t.Errorf("Expected 1 errored, got %d", len(br.Errored))
 	}
 }
 

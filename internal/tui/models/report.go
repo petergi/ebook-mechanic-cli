@@ -234,13 +234,14 @@ func (m ReportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the report
 func (m ReportModel) View() string {
-	if m.reportType == "repair" {
+	switch m.reportType {
+	case "repair":
 		return m.renderRepairReport()
-	}
-	if m.reportType == "batch" {
+	case "batch":
 		return m.renderBatchReport()
+	default:
+		return m.renderValidationReport()
 	}
-	return m.renderValidationReport()
 }
 
 // renderValidationReport renders a validation report
@@ -624,7 +625,7 @@ func (m ReportModel) formatBatchItem(r operations.Result, category string) strin
 	}
 
 	msg := fmt.Sprintf("%s %s", icon, m.makeClickable(filepath.Base(r.FilePath)))
-	
+
 	switch category {
 	case "invalid":
 		if r.Report != nil && !r.Report.IsValid {
@@ -805,7 +806,8 @@ func (m ReportModel) saveReport() (string, error) {
 	var filename string
 	var content string
 
-	if m.reportType == "repair" {
+	switch m.reportType {
+	case "repair":
 		filename = fmt.Sprintf("repair-%s.txt", timestamp)
 		// Basic text formatting for repair
 		var b strings.Builder
@@ -826,7 +828,7 @@ func (m ReportModel) saveReport() (string, error) {
 			b.WriteString(fmt.Sprintf("- %s\n", action.Description))
 		}
 		content = b.String()
-	} else if m.reportType == "batch" {
+	case "batch":
 		filename = fmt.Sprintf("batch-%s.txt", timestamp)
 		var b strings.Builder
 		b.WriteString("=== Batch Report ===\n\n")
@@ -866,7 +868,7 @@ func (m ReportModel) saveReport() (string, error) {
 			}
 		}
 		content = b.String()
-	} else {
+	default:
 		filename = fmt.Sprintf("validation-%s.txt", timestamp)
 		// We can reuse the CLI TextFormatter logic if we want,
 		// but for now simple text output

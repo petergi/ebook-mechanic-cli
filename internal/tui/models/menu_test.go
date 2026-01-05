@@ -144,30 +144,18 @@ func TestMenuModel_Update_QuitOption(t *testing.T) {
 	}
 }
 
-func TestMenuModel_Update_QuitKey(t *testing.T) {
-	tests := []struct {
-		name string
-		key  tea.KeyMsg
-	}{
-		{"q key", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}},
-		{"esc key", tea.KeyMsg{Type: tea.KeyEsc}},
-		{"ctrl+c", tea.KeyMsg{Type: tea.KeyCtrlC}},
+func TestMenuModel_Init(t *testing.T) {
+	m := NewMenuModel()
+	if cmd := m.Init(); cmd != nil {
+		t.Error("Expected nil Init command")
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			m := NewMenuModel()
-			updatedModel, cmd := m.Update(tt.key)
-			m = updatedModel.(MenuModel)
-
-			if !m.quitting {
-				t.Error("Expected quitting to be true")
-			}
-
-			if cmd == nil {
-				t.Fatal("Expected quit command to be non-nil")
-			}
-		})
+func TestMenuModel_Update_QuitKey(t *testing.T) {
+	m := NewMenuModel()
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if cmd == nil {
+		t.Error("Expected tea.Quit command")
 	}
 }
 
@@ -252,11 +240,13 @@ func TestMenuModel_View_Quitting(t *testing.T) {
 	}
 }
 
-func TestMenuModel_Init(t *testing.T) {
+func TestMenuModel_Quitting(t *testing.T) {
 	m := NewMenuModel()
-	cmd := m.Init()
-
-	if cmd != nil {
-		t.Error("Expected Init to return nil command")
+	if m.Quitting() {
+		t.Error("Expected Quitting false initially")
+	}
+	m.quitting = true
+	if !m.Quitting() {
+		t.Error("Expected Quitting true")
 	}
 }

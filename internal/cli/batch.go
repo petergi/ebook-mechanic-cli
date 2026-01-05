@@ -203,7 +203,7 @@ func runBatchValidate(ctx context.Context, dir string, flags *batchFlags, rootFl
 					case <-done:
 						return
 					case update := <-processor.ProgressChannel():
-						bar.Set(update.Completed)
+						_ = bar.Set(update.Completed)
 					}
 				}
 			}()
@@ -216,7 +216,7 @@ func runBatchValidate(ctx context.Context, dir string, flags *batchFlags, rootFl
 	duration := time.Since(start)
 	close(done)
 	if bar != nil {
-		bar.Finish()
+		_ = bar.Finish()
 	}
 
 	// Aggregate results
@@ -235,8 +235,8 @@ func runBatchValidate(ctx context.Context, dir string, flags *batchFlags, rootFl
 	}
 
 	// Exit with non-zero if any files failed
-	if len(batchResult.Failed) > 0 {
-		os.Exit(1)
+	if len(batchResult.Invalid) > 0 || len(batchResult.Errored) > 0 {
+		osExit(1)
 	}
 
 	return nil
@@ -329,7 +329,7 @@ func runBatchRepair(ctx context.Context, dir string, flags *batchFlags, rootFlag
 					case <-done:
 						return
 					case update := <-processor.ProgressChannel():
-						bar.Set(update.Completed)
+						_ = bar.Set(update.Completed)
 					}
 				}
 			}()
@@ -342,7 +342,7 @@ func runBatchRepair(ctx context.Context, dir string, flags *batchFlags, rootFlag
 	duration := time.Since(start)
 	close(done)
 	if bar != nil {
-		bar.Finish()
+		_ = bar.Finish()
 	}
 
 	// Aggregate results
@@ -361,8 +361,8 @@ func runBatchRepair(ctx context.Context, dir string, flags *batchFlags, rootFlag
 	}
 
 	// Exit with non-zero if any files failed
-	if len(batchResult.Failed) > 0 {
-		os.Exit(1)
+	if len(batchResult.Invalid) > 0 || len(batchResult.Errored) > 0 {
+		osExit(1)
 	}
 
 	return nil

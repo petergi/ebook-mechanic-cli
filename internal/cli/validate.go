@@ -89,7 +89,7 @@ func runValidate(ctx context.Context, target string, flags *validateFlags, rootF
 
 	// Exit with non-zero if file is invalid (but don't return error to avoid double printing)
 	if !report.IsValid {
-		os.Exit(1)
+		osExit(1)
 	}
 
 	return nil
@@ -124,8 +124,8 @@ func validateFromStdin(ctx context.Context, fileType string) (*ebmlib.Validation
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer os.Remove(tmpFile.Name())
-	defer tmpFile.Close()
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	defer func() { _ = tmpFile.Close() }()
 
 	if _, err := tmpFile.Write(data); err != nil {
 		return nil, fmt.Errorf("failed to write to temp file: %w", err)
