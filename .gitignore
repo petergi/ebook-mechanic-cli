@@ -49,3 +49,4 @@ brk/
 .build
 .lint-tmp/
 .lint-cache/
+wiki/
