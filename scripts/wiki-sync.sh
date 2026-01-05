@@ -55,6 +55,19 @@ sync_docs() {
         done
     fi
 
+    # Rewrite links in ADR_INDEX.md for Wiki compatibility
+    # Converts [Link](adr/0001-name.md) to [Link](ADR-0001-name)
+    if [ -f "$WIKI_DIR/ADR_INDEX.md" ]; then
+        log_info "Rewriting ADR_INDEX.md links for Wiki..."
+        # Use sed to replace 'adr/' with 'ADR-' and remove '.md' extension in links
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS sed requires '' for -i
+            sed -i '' 's|(\(adr/\)\(.*\)\.md)|(ADR-\2)|g' "$WIKI_DIR/ADR_INDEX.md"
+        else
+            sed -i 's|(\(adr/\)\(.*\)\.md)|(ADR-\2)|g' "$WIKI_DIR/ADR_INDEX.md"
+        fi
+    fi
+
     # Ensure Home page exists
     if [ -f "$DOCS_DIR/README.md" ]; then
         log_info "Creating Home.md from docs/README.md..."
