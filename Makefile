@@ -131,6 +131,33 @@ run-cli: ## Run the CLI validation (usage: make run-cli RUN_ARGS="path/to/file")
 	fi
 	$(GO) run $(CMD_DIR) $(RUN_ARGS)
 
+.PHONY: run-repair
+run-repair: ## Run single-file repair (usage: make run-repair RUN_ARGS="book.epub --in-place")
+	@echo "$(BOLD)$(RED)Running repair...$(RESET)"
+	@if [ -z "$(RUN_ARGS)" ]; then \
+		echo "$(BOLD)$(YELLOW)Usage: make run-repair RUN_ARGS=\"book.epub --in-place\"$(RESET)"; \
+		exit 1; \
+	fi
+	$(GO) run $(CMD_DIR) repair $(RUN_ARGS)
+
+.PHONY: run-batch-validate
+run-batch-validate: ## Run batch validation (usage: make run-batch-validate RUN_ARGS="./books --jobs 8")
+	@echo "$(BOLD)$(RED)Running batch validation...$(RESET)"
+	@if [ -z "$(RUN_ARGS)" ]; then \
+		echo "$(BOLD)$(YELLOW)Usage: make run-batch-validate RUN_ARGS=\"./books --jobs 8\"$(RESET)"; \
+		exit 1; \
+	fi
+	$(GO) run $(CMD_DIR) batch validate $(RUN_ARGS)
+
+.PHONY: run-batch-repair
+run-batch-repair: ## Run batch repair (usage: make run-batch-repair RUN_ARGS="./books --in-place --jobs 8")
+	@echo "$(BOLD)$(RED)Running batch repair...$(RESET)"
+	@if [ -z "$(RUN_ARGS)" ]; then \
+		echo "$(BOLD)$(YELLOW)Usage: make run-batch-repair RUN_ARGS=\"./books --in-place --jobs 8\"$(RESET)"; \
+		exit 1; \
+	fi
+	$(GO) run $(CMD_DIR) batch repair $(RUN_ARGS)
+
 .PHONY: check
 check: build test lint vet ## Run build, tests, lint, and vet
 	@echo "$(BOLD)$(GREEN)✓ Checks complete$(RESET)"

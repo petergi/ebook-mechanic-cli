@@ -18,6 +18,7 @@ import (
 type ReportModel struct {
 	report          *ebmlib.ValidationReport
 	repairResult    *ebmlib.RepairResult
+	repairReport    *ebmlib.ValidationReport
 	batchResult     *operations.BatchResult
 	reportType      string // "validation", "repair", "batch"
 	width           int
@@ -86,6 +87,11 @@ func NewBatchReportModel(result *operations.BatchResult, width, height int) Repo
 
 // NewRepairReportModel creates a new report model for repair results
 func NewRepairReportModel(result *ebmlib.RepairResult, width, height int) ReportModel {
+	return NewRepairReportModelWithValidation(result, nil, width, height)
+}
+
+// NewRepairReportModelWithValidation creates a new report model for repair results with optional validation.
+func NewRepairReportModelWithValidation(result *ebmlib.RepairResult, report *ebmlib.ValidationReport, width, height int) ReportModel {
 	if width == 0 {
 		width = 80
 	}
@@ -95,6 +101,7 @@ func NewRepairReportModel(result *ebmlib.RepairResult, width, height int) Report
 
 	return ReportModel{
 		repairResult: result,
+		repairReport: report,
 		reportType:   "repair",
 		width:        width,
 		height:       height,
@@ -452,9 +459,14 @@ func (m ReportModel) renderRepairReport() string {
 			)
 	}
 
+	validationBox := m.renderRepairValidationBox()
+
 	// Scrollable details view
 	var detailParts []string
 	detailParts = append(detailParts, statusBox)
+	if validationBox != "" {
+		detailParts = append(detailParts, "", validationBox)
+	}
 	if actionsBox != "" {
 		detailParts = append(detailParts, "", actionsBox)
 	}
@@ -947,6 +959,41 @@ func (m ReportModel) renderSaveStatusLine() string {
 		return styles.ErrorStyle.Render(fmt.Sprintf("%s Error saving report: %v", styles.IconCross, m.saveError))
 	}
 	return ""
+}
+
+func (m ReportModel) renderRepairValidationBox() string {
+	if m.repairReport == nil {
+		return ""
+	}
+
+	status := "Invalid"
+	statusStyle := styles.ErrorStyle
+	if m.repairReport.IsValid {
+		status = "Valid"
+		statusStyle = styles.SuccessStyle
+	}
+
+	headers := []string{"Metric", "Value"}
+	rows := [][]string{
+		{"Status", statusStyle.Render(status)},
+		{"Errors", fmt.Sprintf("%d", m.repairReport.ErrorCount())},
+		{"Warnings", fmt.Sprintf("%d", m.repairReport.WarningCount())},
+		{"Info", fmt.Sprintf("%d", m.repairReport.InfoCount())},
+	}
+
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		styles.SubtitleStyle.Render("Post-repair Validation"),
+		"",
+		styles.RenderTable(headers, rows),
+	)
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(styles.ColorPrimary).
+		Padding(1, 2).
+		Width(m.width - 8).
+		Render(content)
 }
 
 func repairArtifactTitle(path string) string {

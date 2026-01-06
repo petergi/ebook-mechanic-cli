@@ -9,8 +9,8 @@ import (
 func TestNewMenuModel(t *testing.T) {
 	m := NewMenuModel()
 
-	if len(m.options) != 6 {
-		t.Errorf("Expected 6 options, got %d", len(m.options))
+	if len(m.options) != 8 {
+		t.Errorf("Expected 8 options, got %d", len(m.options))
 	}
 
 	if m.selected != 0 {
@@ -21,8 +21,8 @@ func TestNewMenuModel(t *testing.T) {
 		t.Errorf("Expected first option to be 'validate', got '%s'", m.options[0].Action)
 	}
 
-	if m.options[5].Action != "quit" {
-		t.Errorf("Expected last option to be 'quit', got '%s'", m.options[5].Action)
+	if m.options[7].Action != "quit" {
+		t.Errorf("Expected last option to be 'quit', got '%s'", m.options[7].Action)
 	}
 }
 
@@ -53,7 +53,7 @@ func TestMenuModel_Update_NavigateUp(t *testing.T) {
 
 func TestMenuModel_Update_WrappingDown(t *testing.T) {
 	m := NewMenuModel()
-	m.selected = 5 // Last option
+	m.selected = 7 // Last option
 
 	// Navigate down (should wrap to 0)
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
@@ -86,8 +86,8 @@ func TestMenuModel_Update_VimKeys(t *testing.T) {
 	}{
 		{"j moves down", "j", 0, 1},
 		{"k moves up", "k", 1, 0},
-		{"j wraps at bottom", "j", 5, 0},
-		{"k wraps at top", "k", 0, 5},
+		{"j wraps at bottom", "j", 7, 0},
+		{"k wraps at top", "k", 0, 7},
 	}
 
 	for _, tt := range tests {
@@ -129,7 +129,7 @@ func TestMenuModel_Update_SelectOption(t *testing.T) {
 
 func TestMenuModel_Update_QuitOption(t *testing.T) {
 	m := NewMenuModel()
-	m.selected = 5 // Quit option
+	m.selected = 7 // Quit option
 
 	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updatedModel.(MenuModel)
@@ -185,8 +185,10 @@ func TestMenuModel_SelectedAction(t *testing.T) {
 		{1, "repair"},
 		{2, "multi-validate"},
 		{3, "multi-repair"},
-		{4, "batch"},
-		{5, "quit"},
+		{4, "batch-validate"},
+		{5, "batch-repair"},
+		{6, "settings"},
+		{7, "quit"},
 	}
 
 	for _, tt := range tests {

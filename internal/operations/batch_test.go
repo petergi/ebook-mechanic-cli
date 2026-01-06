@@ -186,7 +186,7 @@ func TestAggregateResults_Detailed(t *testing.T) {
 		{FilePath: "repair_fail.epub", Repair: &ebmlib.RepairResult{Success: false}},
 	}
 
-	br := AggregateResults(results, time.Second)
+	br := AggregateResults(results, time.Second, OperationRepair)
 
 	if len(br.Valid) != 2 { // valid.epub, repair_ok.epub
 		t.Errorf("Expected 2 valid, got %d", len(br.Valid))
@@ -197,6 +197,12 @@ func TestAggregateResults_Detailed(t *testing.T) {
 	if len(br.Errored) != 1 { // system_err.epub
 		t.Errorf("Expected 1 errored, got %d", len(br.Errored))
 	}
+	if br.RepairsAttempted != 3 { // repair_ok, repair_fail, system_err
+		t.Errorf("Expected 3 repairs attempted, got %d", br.RepairsAttempted)
+	}
+	if br.RepairsSucceeded != 1 { // repair_ok
+		t.Errorf("Expected 1 repair succeeded, got %d", br.RepairsSucceeded)
+	}
 }
 
 func TestAggregateResults_AllSuccessful(t *testing.T) {
@@ -205,7 +211,7 @@ func TestAggregateResults_AllSuccessful(t *testing.T) {
 		{FilePath: "file2.epub", Error: nil},
 	}
 
-	batchResult := AggregateResults(results, 0)
+	batchResult := AggregateResults(results, 0, OperationValidate)
 
 	if len(batchResult.Failed) != 0 {
 		t.Errorf("Expected 0 failed results, got %d", len(batchResult.Failed))
@@ -222,7 +228,7 @@ func TestAggregateResults_AllFailed(t *testing.T) {
 		{FilePath: "file2.epub", Error: context.DeadlineExceeded},
 	}
 
-	batchResult := AggregateResults(results, 0)
+	batchResult := AggregateResults(results, 0, OperationValidate)
 
 	if len(batchResult.Successful) != 0 {
 		t.Errorf("Expected 0 successful results, got %d", len(batchResult.Successful))
@@ -236,7 +242,7 @@ func TestAggregateResults_AllFailed(t *testing.T) {
 func TestAggregateResults_Empty(t *testing.T) {
 	results := []Result{}
 
-	batchResult := AggregateResults(results, 0)
+	batchResult := AggregateResults(results, 0, OperationValidate)
 
 	if batchResult.Total != 0 {
 		t.Errorf("Expected Total to be 0, got %d", batchResult.Total)

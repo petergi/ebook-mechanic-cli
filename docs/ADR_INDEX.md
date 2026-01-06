@@ -10,3 +10,4 @@ Architecture Decision Records for ebook-mechanic-cli.
 - [ADR 0004: 95 percent test coverage requirement](adr/0004-95-percent-test-coverage-requirement.md)
 - [ADR 0005: Concurrency model for batch processing](adr/0005-concurrency-model-for-batch-processing.md)
 - [ADR 0006: Dual-mode architecture](adr/0006-dual-mode-architecture.md)
+- [ADR 0007: Repair save modes and optional post-repair validation](adr/0007-repair-save-modes-and-validation.md)

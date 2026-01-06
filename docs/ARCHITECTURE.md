@@ -74,6 +74,7 @@ The TUI layer implements the Bubbletea Model-View-Update (MVU) pattern:
 - **browser.go**: Interactive file browser supporting single and multi-file selection.
 - **progress.go**: Progress indicator with real-time updates and spinner.
 - **report.go**: Styled report viewer with tabs for filtering (Valid, Invalid, Errored).
+- **settings.go**: Settings screen for batch jobs and post-repair validation.
 
 #### Application (`internal/tui/app.go`)
 
@@ -98,7 +99,7 @@ Shared business logic bridging TUI/CLI and the library:
   - Worker pool implementation for concurrent processing.
   - Result aggregation and categorization (Valid, Invalid, Errored).
   - Context-aware cancellation and progress channel management.
-- **validate.go** & **repair.go**: Single file operation wrappers.
+- **validate.go** & **repair.go**: Single file operation wrappers with configurable repair save modes.
 - **File Discovery**: Robust logic for finding files (recursive, max depth, glob ignores).
 
 ### 4. Configuration (`internal/config/`)

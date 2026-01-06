@@ -13,11 +13,12 @@ import (
 )
 
 type repairFlags struct {
-	output    string
-	inPlace   bool
-	backup    bool
-	backupDir string
-	saveMode  string
+	output       string
+	inPlace      bool
+	backup       bool
+	backupDir    string
+	saveMode     string
+	skipValidate bool
 }
 
 func newRepairCmd(rootFlags *RootFlags) *cobra.Command {
@@ -42,6 +43,9 @@ Automatic backups are supported before in-place repairs.`,
   # Repair by renaming the repaired file
   ebm repair book.epub --in-place --save-mode rename-repaired
 
+  # Repair without post-validation
+  ebm repair book.epub --in-place --skip-validate
+
   # Repair with JSON report
   ebm repair book.epub --output fixed.epub --format json`,
 		Args: cobra.ExactArgs(1),
@@ -54,7 +58,8 @@ Automatic backups are supported before in-place repairs.`,
 	cmd.Flags().BoolVar(&flags.inPlace, "in-place", false, "Repair file in place (replaces original)")
 	cmd.Flags().BoolVar(&flags.backup, "backup", false, "Create backup before in-place repair (legacy alias for --save-mode backup-original)")
 	cmd.Flags().StringVar(&flags.backupDir, "backup-dir", "", "Directory for backup files (default: same as input)")
-	cmd.Flags().StringVar(&flags.saveMode, "save-mode", "", "Save mode for in-place repairs: backup-original or rename-repaired")
+	cmd.Flags().StringVar(&flags.saveMode, "save-mode", "", "Save mode for in-place repairs: backup-original, rename-repaired, or no-backup")
+	cmd.Flags().BoolVar(&flags.skipValidate, "skip-validate", false, "Skip post-repair validation")
 
 	return cmd
 }
@@ -116,10 +121,12 @@ func runRepair(ctx context.Context, filePath string, flags *repairFlags, rootFla
 		return fmt.Errorf("repair failed: %w", repairErr)
 	}
 
-	// Validate the repaired file
+	// Validate the repaired file unless skipped
 	var validationReport *ebmlib.ValidationReport
-	validateOp := operations.NewValidateOperation(ctx)
-	validationReport, _ = validateOp.Execute(outputPath)
+	if !flags.skipValidate {
+		validateOp := operations.NewValidateOperation(ctx)
+		validationReport, _ = validateOp.Execute(outputPath)
+	}
 
 	// Write the repair report
 	if err := WriteRepairReport(result, validationReport, opts); err != nil {
@@ -181,7 +188,12 @@ func resolveRepairSaveMode(mode string, backup bool) (operations.RepairSaveMode,
 			return "", fmt.Errorf("--backup is not compatible with save-mode rename-repaired")
 		}
 		return operations.RepairSaveModeRenameRepaired, nil
+	case operations.RepairSaveModeNoBackup:
+		if backup {
+			return "", fmt.Errorf("--backup is not compatible with save-mode no-backup")
+		}
+		return operations.RepairSaveModeNoBackup, nil
 	default:
-		return "", fmt.Errorf("invalid save mode: %s (expected backup-original or rename-repaired)", mode)
+		return "", fmt.Errorf("invalid save mode: %s (expected backup-original, rename-repaired, or no-backup)", mode)
 	}
 }

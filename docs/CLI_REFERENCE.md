@@ -29,6 +29,13 @@ In-place repairs can control where the repaired file lands.
 
 - `--save-mode backup-original`: creates `*_original` backups and repairs the original filename (default for in-place repairs).
 - `--save-mode rename-repaired`: writes `*_repaired` and keeps the original untouched.
+- `--save-mode no-backup`: repairs in place without creating backups.
+- `--skip-validate`: skips the post-repair validation pass for faster repairs.
+
+## Batch Flags
+
+- `--jobs N`: number of concurrent workers for batch operations.
+- `--save-mode ...`: applies to `batch repair` in-place mode.
 
 ## Notes
 

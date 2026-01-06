@@ -99,6 +99,7 @@ func TestAppUpdateMenu_SelectActions(t *testing.T) {
 		{"repair", "repair", StateRepairMode},
 		{"batch-validate", "batch-validate", StateBrowser},
 		{"batch-repair", "batch-repair", StateRepairMode},
+		{"settings", "settings", StateSettings},
 	}
 
 	for _, tt := range tests {
@@ -195,6 +196,25 @@ func TestAppUpdateRepairMode_Select(t *testing.T) {
 	}
 }
 
+func TestAppUpdateSettings_Save(t *testing.T) {
+	app := NewApp()
+	app.state = StateSettings
+	app.settingsModel = models.NewSettingsModel(2, true, 80, 24)
+
+	model, _ := app.Update(models.SettingsSaveMsg{Jobs: 6, SkipValidation: false})
+	updated := model.(App)
+
+	if updated.state != StateMenu {
+		t.Errorf("expected state to be StateMenu, got %v", updated.state)
+	}
+	if updated.batchJobs != 6 {
+		t.Errorf("expected batch jobs 6, got %d", updated.batchJobs)
+	}
+	if updated.skipValidation {
+		t.Error("expected skipValidation false")
+	}
+}
+
 func TestAppUpdateBrowser_StartValidation(t *testing.T) {
 	app := NewApp()
 	app.state = StateBrowser
@@ -243,16 +263,16 @@ func TestAppUpdateBrowser_StartRepair(t *testing.T) {
 	}
 
 	doneMsg := extractOperationDoneMsg(t, cmd)
-	result, ok := doneMsg.Result.(*ebmlib.RepairResult)
+	outcome, ok := doneMsg.Result.(models.RepairOutcome)
 	if !ok {
-		t.Fatalf("expected RepairResult, got %T", doneMsg.Result)
+		t.Fatalf("expected RepairOutcome, got %T", doneMsg.Result)
 	}
 
-	if result.Success {
+	if outcome.Result.Success {
 		t.Error("expected repair result to be unsuccessful for unsupported file type")
 	}
 
-	if result.Error == nil {
+	if outcome.Result.Error == nil {
 		t.Fatal("expected repair result to contain error")
 	}
 }

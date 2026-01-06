@@ -47,9 +47,19 @@ func NewMenuModel() MenuModel {
 				Action:      "multi-repair",
 			},
 			{
-				Label:       "Batch Process Directory",
-				Description: "Validate or repair all files in a folder",
-				Action:      "batch",
+				Label:       "Batch Validate Directory",
+				Description: "Validate all ebooks in a folder",
+				Action:      "batch-validate",
+			},
+			{
+				Label:       "Batch Repair Directory",
+				Description: "Repair all ebooks in a folder",
+				Action:      "batch-repair",
+			},
+			{
+				Label:       "Settings",
+				Description: "Adjust batch jobs and validation",
+				Action:      "settings",
 			},
 			{
 				Label:       "Quit",

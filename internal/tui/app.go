@@ -22,26 +22,30 @@ const (
 	StateMenu AppState = iota
 	StateBrowser
 	StateRepairMode
+	StateSettings
 	StateProgress
 	StateReport
 )
 
 // App is the main TUI application coordinator
 type App struct {
-	state         AppState
-	menuModel     models.MenuModel
-	browserModel  models.BrowserModel
-	repairModel   models.RepairModeModel
-	progressModel models.ProgressModel
-	reportModel   models.ReportModel
-	ctx           context.Context
-	cancel        context.CancelFunc
-	selectedFile  string
-	activeAction  string
-	repairMode    operations.RepairSaveMode
-	width         int
-	height        int
-	progressCh    <-chan operations.ProgressUpdate
+	state          AppState
+	menuModel      models.MenuModel
+	browserModel   models.BrowserModel
+	repairModel    models.RepairModeModel
+	settingsModel  models.SettingsModel
+	progressModel  models.ProgressModel
+	reportModel    models.ReportModel
+	ctx            context.Context
+	cancel         context.CancelFunc
+	selectedFile   string
+	activeAction   string
+	repairMode     operations.RepairSaveMode
+	batchJobs      int
+	skipValidation bool
+	width          int
+	height         int
+	progressCh     <-chan operations.ProgressUpdate
 }
 
 // NewApp creates a new TUI application
@@ -49,11 +53,13 @@ func NewApp() App {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return App{
-		state:      StateMenu,
-		menuModel:  models.NewMenuModel(),
-		ctx:        ctx,
-		cancel:     cancel,
-		repairMode: operations.RepairSaveModeBackupOriginal,
+		state:          StateMenu,
+		menuModel:      models.NewMenuModel(),
+		ctx:            ctx,
+		cancel:         cancel,
+		repairMode:     operations.RepairSaveModeBackupOriginal,
+		batchJobs:      operations.DefaultBatchConfig().NumWorkers,
+		skipValidation: false,
 	}
 }
 
@@ -77,6 +83,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.updateBrowser(msg)
 	case StateRepairMode:
 		return a.updateRepairMode(msg)
+	case StateSettings:
+		return a.updateSettings(msg)
 	case StateProgress:
 		return a.updateProgress(msg)
 	case StateReport:
@@ -95,6 +103,8 @@ func (a App) View() string {
 		return a.browserModel.View()
 	case StateRepairMode:
 		return a.repairModel.View()
+	case StateSettings:
+		return a.settingsModel.View()
 	case StateProgress:
 		return a.progressModel.View()
 	case StateReport:
@@ -138,6 +148,11 @@ func (a App) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.state = StateBrowser
 			return a, a.browserModel.Init()
 
+		case "settings":
+			a.settingsModel = models.NewSettingsModel(a.batchJobs, a.skipValidation, a.width, a.height)
+			a.state = StateSettings
+			return a, a.settingsModel.Init()
+
 		case "quit":
 			a.cancel()
 			return a, tea.Quit
@@ -151,6 +166,30 @@ func (a App) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.cancel()
 			return a, tea.Quit
 		}
+	}
+
+	return a, cmd
+}
+
+// updateSettings handles settings updates
+func (a App) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case models.SettingsSaveMsg:
+		a.batchJobs = msg.Jobs
+		a.skipValidation = msg.SkipValidation
+		a.state = StateMenu
+		return a, nil
+
+	case models.BackToMenuMsg:
+		a.state = StateMenu
+		return a, nil
+
+	default:
+		var m tea.Model
+		m, cmd = a.settingsModel.Update(msg)
+		a.settingsModel = m.(models.SettingsModel)
 	}
 
 	return a, cmd
@@ -255,6 +294,11 @@ func (a App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.state = StateReport
 			return a, a.reportModel.Init()
 
+		case models.RepairOutcome:
+			a.reportModel = models.NewRepairReportModelWithValidation(result.Result, result.Report, a.width, a.height)
+			a.state = StateReport
+			return a, a.reportModel.Init()
+
 		case *ebmlib.RepairResult:
 			a.reportModel = models.NewRepairReportModel(result, a.width, a.height)
 			a.state = StateReport
@@ -338,6 +382,9 @@ func (a App) startBatchDirectory(path string, opType operations.OperationType) (
 	// and send the result when done.
 	config := operations.DefaultBatchConfig()
 	config.RepairMode = a.repairMode
+	if a.batchJobs > 0 {
+		config.NumWorkers = a.batchJobs
+	}
 	batch := operations.NewBatchProcessor(a.ctx, config)
 	doneCh := make(chan operations.BatchResult)
 	start := time.Now()
@@ -386,6 +433,9 @@ func (a App) startBatchWithFiles(files []string, action string) (tea.Model, tea.
 	// Start batch processing in a goroutine
 	config := operations.DefaultBatchConfig()
 	config.RepairMode = a.repairMode
+	if a.batchJobs > 0 {
+		config.NumWorkers = a.batchJobs
+	}
 	batch := operations.NewBatchProcessor(a.ctx, config)
 	doneCh := make(chan operations.BatchResult)
 	start := time.Now()
@@ -520,7 +570,7 @@ func (a App) startRepair(filePath string, mode operations.RepairSaveMode) (tea.M
 		a.progressModel.Init(),
 		func() tea.Msg {
 			repairer := operations.NewRepairOperation(a.ctx)
-			result, _, err := repairer.ExecuteWithSaveMode(filePath, mode, "")
+			result, outputPath, err := repairer.ExecuteWithSaveMode(filePath, mode, "")
 
 			if err != nil {
 				// Create error result
@@ -528,9 +578,29 @@ func (a App) startRepair(filePath string, mode operations.RepairSaveMode) (tea.M
 					Success: false,
 					Error:   err,
 				}
+				return models.OperationDoneMsg{Result: models.RepairOutcome{Result: result}}
 			}
 
-			return models.OperationDoneMsg{Result: result}
+			var validationReport *ebmlib.ValidationReport
+			if !a.skipValidation && outputPath != "" {
+				validateOp := operations.NewValidateOperation(a.ctx)
+				validationReport, err = validateOp.Execute(outputPath)
+				if err != nil {
+					validationReport = &ebmlib.ValidationReport{
+						FilePath: outputPath,
+						IsValid:  false,
+						Errors: []ebmlib.ValidationError{
+							{
+								Code:     "SYSTEM_ERROR",
+								Message:  err.Error(),
+								Severity: ebmlib.SeverityError,
+							},
+						},
+					}
+				}
+			}
+
+			return models.OperationDoneMsg{Result: models.RepairOutcome{Result: result, Report: validationReport}}
 		},
 	)
 }

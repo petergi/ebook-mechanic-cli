@@ -17,10 +17,7 @@ func TestRunBatchValidate_WithFile(t *testing.T) {
 
 	}
 
-	
-
 	ctx := context.Background()
-
 
 	flags := &batchFlags{
 		recursive: true,
@@ -43,10 +40,7 @@ func TestRunBatchRepair_WithFile(t *testing.T) {
 
 	}
 
-	
-
 	ctx := context.Background()
-
 
 	flags := &batchFlags{
 		recursive: true,
@@ -70,10 +64,7 @@ func TestRunBatchValidate_ProgressModes(t *testing.T) {
 
 	}
 
-	
-
 	modes := []string{"auto", "simple", "none"}
-
 
 	for _, mode := range modes {
 		t.Run(mode, func(t *testing.T) {
@@ -93,7 +84,7 @@ func TestRunBatchRepair_WithBackup(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmpDir, "test.epub"), []byte("test"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	
+
 	ctx := context.Background()
 	flags := &batchFlags{
 		recursive: true,
@@ -118,7 +109,7 @@ func TestRunBatchRepair_DefaultJobs(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmpDir, "test.epub"), []byte("test"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	
+
 	ctx := context.Background()
 	flags := &batchFlags{
 		jobs:     0,
@@ -139,10 +130,7 @@ func TestRunBatchValidate_SummaryOnly(t *testing.T) {
 
 	}
 
-	
-
 	ctx := context.Background()
-
 
 	flags := &batchFlags{
 		summaryOnly: true,
@@ -164,10 +152,7 @@ func TestRunBatchValidate_WithIgnore(t *testing.T) {
 
 	}
 
-	
-
 	ctx := context.Background()
-
 
 	flags := &batchFlags{
 		ignore:   []string{"*.epub"},
@@ -210,10 +195,7 @@ func TestRunBatchValidate_InvalidReport(t *testing.T) {
 
 	}
 
-	
-
 	ctx := context.Background()
-
 
 	flags := &batchFlags{jobs: 1, maxDepth: -1}
 	rootFlags := &RootFlags{Output: "/invalid/path"}

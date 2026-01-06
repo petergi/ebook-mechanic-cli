@@ -21,6 +21,7 @@ type RepairSaveMode string
 const (
 	RepairSaveModeBackupOriginal RepairSaveMode = "backup-original"
 	RepairSaveModeRenameRepaired RepairSaveMode = "rename-repaired"
+	RepairSaveModeNoBackup       RepairSaveMode = "no-backup"
 )
 
 // NewRepairOperation creates a new repair operation
@@ -111,6 +112,16 @@ func (r *RepairOperation) ExecuteWithSaveMode(filePath string, mode RepairSaveMo
 			return nil, "", err
 		}
 		result.BackupPath = backupPath
+		return result, filePath, nil
+
+	case RepairSaveModeNoBackup:
+		if backupDir != "" {
+			return nil, "", fmt.Errorf("backup dir is not supported with no-backup mode")
+		}
+		result, err := r.Execute(filePath)
+		if err != nil {
+			return nil, "", err
+		}
 		return result, filePath, nil
 
 	default:

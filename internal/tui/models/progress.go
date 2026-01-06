@@ -137,12 +137,32 @@ func (m ProgressModel) View() string {
 	spinnerChar := string(styles.IconSpinner[m.spinner])
 	title := styles.RenderTitle(spinnerChar + "  " + m.operation)
 
-	// Status box
+	// Status box with operation-specific information
 	statusText := "Processing..."
-	if m.currentFile != "" {
-		statusText = "Current: " + m.currentFile
-	} else if m.total == 1 && m.filePath != "" {
-		statusText = "File: " + m.filePath
+	var operationIcon string
+
+	// Show operation-specific status
+	switch m.operation {
+	case "Batch Repair":
+		operationIcon = "🔧"
+		if m.currentFile != "" {
+			statusText = fmt.Sprintf("%s Attempting repair: %s", operationIcon, m.currentFile)
+		} else {
+			statusText = fmt.Sprintf("%s Repairing ebooks...", operationIcon)
+		}
+	case "Batch Validation":
+		operationIcon = "🔍"
+		if m.currentFile != "" {
+			statusText = fmt.Sprintf("%s Validating: %s", operationIcon, m.currentFile)
+		} else {
+			statusText = fmt.Sprintf("%s Validating ebooks...", operationIcon)
+		}
+	default:
+		if m.currentFile != "" {
+			statusText = "Current: " + m.currentFile
+		} else if m.total == 1 && m.filePath != "" {
+			statusText = "File: " + m.filePath
+		}
 	}
 
 	statusBox := lipgloss.NewStyle().

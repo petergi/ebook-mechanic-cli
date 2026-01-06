@@ -12,6 +12,7 @@ type RepairSaveMode string
 const (
 	RepairSaveModeBackupOriginal RepairSaveMode = "backup-original"
 	RepairSaveModeRenameRepaired RepairSaveMode = "rename-repaired"
+	RepairSaveModeNoBackup       RepairSaveMode = "no-backup"
 )
 
 // RepairModeOption represents a selectable repair save-mode option.
@@ -44,6 +45,11 @@ func NewRepairModeModel(width, height int) RepairModeModel {
 				Label:       "Backup original, keep repaired name",
 				Description: "Creates bookname_original and repairs the original filename",
 				Mode:        RepairSaveModeBackupOriginal,
+			},
+			{
+				Label:       "No backup (in-place)",
+				Description: "Repairs the original filename without creating backups",
+				Mode:        RepairSaveModeNoBackup,
 			},
 			{
 				Label:       "Rename repaired file",

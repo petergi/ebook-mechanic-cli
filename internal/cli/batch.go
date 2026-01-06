@@ -131,7 +131,7 @@ Progress is displayed in real-time showing completed/total files.`,
 	cmd.Flags().BoolVar(&flags.inPlace, "in-place", false, "Repair files in place")
 	cmd.Flags().BoolVar(&flags.backup, "backup", false, "Create backups before in-place repair (legacy alias for --save-mode backup-original)")
 	cmd.Flags().StringVar(&flags.backupDir, "backup-dir", "", "Directory for backup files")
-	cmd.Flags().StringVar(&flags.saveMode, "save-mode", "", "Save mode for in-place repairs: backup-original or rename-repaired")
+	cmd.Flags().StringVar(&flags.saveMode, "save-mode", "", "Save mode for in-place repairs: backup-original, rename-repaired, or no-backup")
 	cmd.Flags().BoolVar(&flags.continueOnError, "continue-on-error", true, "Continue processing on individual file errors")
 
 	return cmd
@@ -261,8 +261,8 @@ func runBatchRepair(ctx context.Context, dir string, flags *batchFlags, rootFlag
 	if err != nil {
 		return err
 	}
-	if mode == operations.RepairSaveModeRenameRepaired && flags.backupDir != "" {
-		return fmt.Errorf("--backup-dir is not supported with save-mode rename-repaired")
+	if (mode == operations.RepairSaveModeRenameRepaired || mode == operations.RepairSaveModeNoBackup) && flags.backupDir != "" {
+		return fmt.Errorf("--backup-dir is not supported with save-mode rename-repaired or no-backup")
 	}
 
 	// Find all matching files
