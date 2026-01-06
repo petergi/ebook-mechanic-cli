@@ -93,10 +93,12 @@ func TestAppUpdateMenu_SelectActions(t *testing.T) {
 	tests := []struct {
 		name   string
 		action string
+		state  AppState
 	}{
-		{"validate", "validate"},
-		{"repair", "repair"},
-		{"batch", "batch"},
+		{"validate", "validate", StateBrowser},
+		{"repair", "repair", StateRepairMode},
+		{"batch-validate", "batch-validate", StateBrowser},
+		{"batch-repair", "batch-repair", StateRepairMode},
 	}
 
 	for _, tt := range tests {
@@ -105,8 +107,8 @@ func TestAppUpdateMenu_SelectActions(t *testing.T) {
 			model, cmd := app.Update(models.MenuSelectMsg{Action: tt.action})
 			updated := model.(App)
 
-			if updated.state != StateBrowser {
-				t.Errorf("expected state to be StateBrowser, got %v", updated.state)
+			if updated.state != tt.state {
+				t.Errorf("expected state to be %v, got %v", tt.state, updated.state)
 			}
 
 			if cmd != nil {
@@ -173,9 +175,30 @@ func TestAppUpdateBrowser_DelegatesToBrowserModel(t *testing.T) {
 	}
 }
 
+func TestAppUpdateRepairMode_Select(t *testing.T) {
+	app := NewApp()
+	app.state = StateRepairMode
+	app.activeAction = "repair"
+	app.repairModel = models.NewRepairModeModel(80, 24)
+
+	model, cmd := app.Update(models.RepairModeSelectMsg{Mode: models.RepairSaveModeRenameRepaired})
+	updated := model.(App)
+
+	if updated.state != StateBrowser {
+		t.Errorf("expected state to be StateBrowser, got %v", updated.state)
+	}
+	if updated.repairMode != operations.RepairSaveModeRenameRepaired {
+		t.Errorf("expected repair mode rename-repaired, got %s", updated.repairMode)
+	}
+	if cmd != nil {
+		t.Error("expected no command from browser init")
+	}
+}
+
 func TestAppUpdateBrowser_StartValidation(t *testing.T) {
 	app := NewApp()
 	app.state = StateBrowser
+	app.activeAction = "validate"
 
 	model, cmd := app.Update(models.FileSelectMsg{Path: "book.txt"})
 	updated := model.(App)
@@ -210,10 +233,7 @@ func TestAppUpdateBrowser_StartValidation(t *testing.T) {
 func TestAppUpdateBrowser_StartRepair(t *testing.T) {
 	app := NewApp()
 	app.state = StateBrowser
-
-	menu := models.NewMenuModel()
-	model, _ := menu.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	app.menuModel = model.(models.MenuModel)
+	app.activeAction = "repair"
 
 	model, cmd := app.Update(models.FileSelectMsg{Path: "book.txt"})
 	updated := model.(App)
@@ -240,14 +260,7 @@ func TestAppUpdateBrowser_StartRepair(t *testing.T) {
 func TestAppUpdateBrowser_StartBatch(t *testing.T) {
 	app := NewApp()
 	app.state = StateBrowser
-
-	menu := models.NewMenuModel()
-	// Navigate to "Batch Process" (index 4)
-	for i := 0; i < 4; i++ {
-		model, _ := menu.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-		menu = model.(models.MenuModel)
-	}
-	app.menuModel = menu
+	app.activeAction = "batch-validate"
 
 	tempDir := t.TempDir()
 	filePath := filepath.Join(tempDir, "book.epub")
@@ -483,9 +496,10 @@ func TestAppUpdateMenu_MultiSelectActions(t *testing.T) {
 	tests := []struct {
 		name   string
 		action string
+		state  AppState
 	}{
-		{"multi-validate", "multi-validate"},
-		{"multi-repair", "multi-repair"},
+		{"multi-validate", "multi-validate", StateBrowser},
+		{"multi-repair", "multi-repair", StateRepairMode},
 	}
 
 	for _, tt := range tests {
@@ -494,10 +508,10 @@ func TestAppUpdateMenu_MultiSelectActions(t *testing.T) {
 			model, _ := app.Update(models.MenuSelectMsg{Action: tt.action})
 			updated := model.(App)
 
-			if updated.state != StateBrowser {
-				t.Errorf("expected state to be StateBrowser, got %v", updated.state)
+			if updated.state != tt.state {
+				t.Errorf("expected state to be %v, got %v", tt.state, updated.state)
 			}
-			if updated.browserModel.SelectedPath() == "" {
+			if updated.state == StateBrowser && updated.browserModel.SelectedPath() == "" {
 				// Check that selected path is empty (or whatever is expected)
 				// but don't leave empty if block
 				t.Log("Selected path is empty as expected")
@@ -509,6 +523,7 @@ func TestAppUpdateMenu_MultiSelectActions(t *testing.T) {
 func TestAppUpdateBrowser_MultiFileSelect(t *testing.T) {
 	app := NewApp()
 	app.state = StateBrowser
+	app.activeAction = "multi-validate"
 
 	msg := models.MultiFileSelectMsg{
 		Paths: []string{"1.epub", "2.epub"},

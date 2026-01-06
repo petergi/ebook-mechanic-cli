@@ -23,6 +23,13 @@ ebm-cli
 - `esc`: back
 - `ctrl+c`: quit
 
+## Repair Save Modes
+
+In-place repairs can control where the repaired file lands.
+
+- `--save-mode backup-original`: creates `*_original` backups and repairs the original filename (default for in-place repairs).
+- `--save-mode rename-repaired`: writes `*_repaired` and keeps the original untouched.
+
 ## Notes
 
 Batch operations currently run validation across all matching files.

@@ -58,7 +58,7 @@ func TestRepairToOutput(t *testing.T) {
 	}
 }
 
-func TestRepairInPlace_NoBackup(t *testing.T) {
+func TestRepairInPlace_BackupOriginal(t *testing.T) {
 	tmpDir := t.TempDir()
 	src := filepath.Join(tmpDir, "book.epub")
 
@@ -67,7 +67,7 @@ func TestRepairInPlace_NoBackup(t *testing.T) {
 	}
 
 	op := operations.NewRepairOperation(context.Background())
-	result, err := repairInPlace(op, src, false, "")
+	result, _, err := repairInPlace(op, src, operations.RepairSaveModeBackupOriginal, "")
 
 	if err != nil {
 		t.Fatalf("repairInPlace failed: %v", err)
@@ -115,7 +115,7 @@ func TestRunRepair_InPlace(t *testing.T) {
 
 func TestRepairInPlace_InvalidFile(t *testing.T) {
 	op := operations.NewRepairOperation(context.Background())
-	_, err := repairInPlace(op, "/non/existent", true, "")
+	_, _, err := repairInPlace(op, "/non/existent", operations.RepairSaveModeBackupOriginal, "")
 	if err == nil {
 		t.Error("Expected error for non-existent file")
 	}
@@ -125,14 +125,14 @@ func TestRepairToOutput_ExistingDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	subDir := filepath.Join(tmpDir, "newdir")
 	src := filepath.Join(tmpDir, "src.epub")
-		dst := filepath.Join(subDir, "dst.epub")
-		
-		if err := os.WriteFile(src, []byte("test"), 0644); err != nil {
-			t.Fatal(err)
-		}
-		
-		op := operations.NewRepairOperation(context.Background())
-	
+	dst := filepath.Join(subDir, "dst.epub")
+
+	if err := os.WriteFile(src, []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	op := operations.NewRepairOperation(context.Background())
+
 	_, _ = repairToOutput(op, src, dst)
 
 	if _, err := os.Stat(subDir); os.IsNotExist(err) {

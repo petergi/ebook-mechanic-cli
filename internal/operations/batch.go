@@ -29,6 +29,8 @@ type BatchConfig struct {
 	QueueSize    int           // Task queue buffer size
 	ProgressRate time.Duration // Progress update frequency
 	Timeout      time.Duration // Per-file operation timeout
+	RepairMode   RepairSaveMode
+	BackupDir    string
 }
 
 // FindFilesOptions configures file discovery for batch operations
@@ -276,7 +278,11 @@ func (bp *BatchProcessor) processTask(task Task) Result {
 
 	case OperationRepair:
 		repairer := NewRepairOperation(ctx)
-		repairResult, err := repairer.Execute(task.FilePath)
+		mode := bp.config.RepairMode
+		if mode == "" {
+			mode = RepairSaveModeBackupOriginal
+		}
+		repairResult, _, err := repairer.ExecuteWithSaveMode(task.FilePath, mode, bp.config.BackupDir)
 		result.Repair = repairResult
 		result.Error = err
 
@@ -339,10 +345,15 @@ type BatchResult struct {
 	Failed     []Result // Deprecated: use Invalid or Errored
 	Duration   time.Duration
 	Total      int
+
+	// Repair-specific metrics
+	Operation        OperationType // The operation that was performed
+	RepairsAttempted int           // Number of repair attempts (for repair operations)
+	RepairsSucceeded int           // Number of successful repairs (for repair operations)
 }
 
 // AggregateResults aggregates a list of results into a BatchResult
-func AggregateResults(results []Result, duration time.Duration) BatchResult {
+func AggregateResults(results []Result, duration time.Duration, operation OperationType) BatchResult {
 	br := BatchResult{
 		Valid:      make([]Result, 0),
 		Invalid:    make([]Result, 0),
@@ -351,12 +362,17 @@ func AggregateResults(results []Result, duration time.Duration) BatchResult {
 		Failed:     make([]Result, 0), // Keeping for backward compatibility for now
 		Duration:   duration,
 		Total:      len(results),
+		Operation:  operation,
 	}
 
 	for _, r := range results {
 		if r.Error != nil {
 			br.Errored = append(br.Errored, r)
 			br.Failed = append(br.Failed, r)
+			// Count as attempted repair if operation was repair
+			if operation == OperationRepair {
+				br.RepairsAttempted++
+			}
 		} else if r.Report != nil {
 			if r.Report.IsValid {
 				br.Valid = append(br.Valid, r)
@@ -366,9 +382,12 @@ func AggregateResults(results []Result, duration time.Duration) BatchResult {
 				br.Failed = append(br.Failed, r)
 			}
 		} else if r.Repair != nil {
+			// This is a repair result
+			br.RepairsAttempted++
 			if r.Repair.Success {
 				br.Valid = append(br.Valid, r)
 				br.Successful = append(br.Successful, r)
+				br.RepairsSucceeded++
 			} else {
 				br.Invalid = append(br.Invalid, r)
 				br.Failed = append(br.Failed, r)

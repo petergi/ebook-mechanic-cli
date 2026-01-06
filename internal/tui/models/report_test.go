@@ -769,4 +769,7 @@ func TestReportModel_Update_ReportSaveMsg(t *testing.T) {
 	if m.savedReportPath != "saved.txt" {
 		t.Error("Expected savedReportPath to be updated")
 	}
+	if !m.saveStatusShow {
+		t.Error("Expected save status to be visible after save")
+	}
 }

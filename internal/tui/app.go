@@ -21,6 +21,7 @@ type AppState int
 const (
 	StateMenu AppState = iota
 	StateBrowser
+	StateRepairMode
 	StateProgress
 	StateReport
 )
@@ -30,11 +31,14 @@ type App struct {
 	state         AppState
 	menuModel     models.MenuModel
 	browserModel  models.BrowserModel
+	repairModel   models.RepairModeModel
 	progressModel models.ProgressModel
 	reportModel   models.ReportModel
 	ctx           context.Context
 	cancel        context.CancelFunc
 	selectedFile  string
+	activeAction  string
+	repairMode    operations.RepairSaveMode
 	width         int
 	height        int
 	progressCh    <-chan operations.ProgressUpdate
@@ -45,10 +49,11 @@ func NewApp() App {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return App{
-		state:     StateMenu,
-		menuModel: models.NewMenuModel(),
-		ctx:       ctx,
-		cancel:    cancel,
+		state:      StateMenu,
+		menuModel:  models.NewMenuModel(),
+		ctx:        ctx,
+		cancel:     cancel,
+		repairMode: operations.RepairSaveModeBackupOriginal,
 	}
 }
 
@@ -70,6 +75,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.updateMenu(msg)
 	case StateBrowser:
 		return a.updateBrowser(msg)
+	case StateRepairMode:
+		return a.updateRepairMode(msg)
 	case StateProgress:
 		return a.updateProgress(msg)
 	case StateReport:
@@ -86,6 +93,8 @@ func (a App) View() string {
 		return a.menuModel.View()
 	case StateBrowser:
 		return a.browserModel.View()
+	case StateRepairMode:
+		return a.repairModel.View()
 	case StateProgress:
 		return a.progressModel.View()
 	case StateReport:
@@ -101,22 +110,28 @@ func (a App) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case models.MenuSelectMsg:
+		a.activeAction = msg.Action
 		switch msg.Action {
-		case "validate", "repair":
+		case "validate":
 			// Show file browser
 			cwd, _ := os.Getwd()
 			a.browserModel = models.NewBrowserModel(cwd, a.width, a.height)
 			a.state = StateBrowser
 			return a, a.browserModel.Init()
 
-		case "multi-validate", "multi-repair":
+		case "repair", "multi-repair", "batch-repair":
+			a.repairModel = models.NewRepairModeModel(a.width, a.height)
+			a.state = StateRepairMode
+			return a, a.repairModel.Init()
+
+		case "multi-validate":
 			// Show multi-select browser
 			cwd, _ := os.Getwd()
 			a.browserModel = models.NewMultiSelectBrowserModel(cwd, a.width, a.height)
 			a.state = StateBrowser
 			return a, a.browserModel.Init()
 
-		case "batch":
+		case "batch-validate":
 			// Show directory browser for batch
 			cwd, _ := os.Getwd()
 			a.browserModel = models.NewBatchBrowserModel(cwd, a.width, a.height)
@@ -141,6 +156,41 @@ func (a App) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, cmd
 }
 
+// updateRepairMode handles repair save-mode selection
+func (a App) updateRepairMode(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case models.RepairModeSelectMsg:
+		a.repairMode = operations.RepairSaveMode(msg.Mode)
+		cwd, _ := os.Getwd()
+		switch a.activeAction {
+		case "repair":
+			a.browserModel = models.NewBrowserModel(cwd, a.width, a.height)
+		case "multi-repair":
+			a.browserModel = models.NewMultiSelectBrowserModel(cwd, a.width, a.height)
+		case "batch-repair":
+			a.browserModel = models.NewBatchBrowserModel(cwd, a.width, a.height)
+		default:
+			a.state = StateMenu
+			return a, nil
+		}
+		a.state = StateBrowser
+		return a, a.browserModel.Init()
+
+	case models.BackToMenuMsg:
+		a.state = StateMenu
+		return a, nil
+
+	default:
+		var m tea.Model
+		m, cmd = a.repairModel.Update(msg)
+		a.repairModel = m.(models.RepairModeModel)
+	}
+
+	return a, cmd
+}
+
 // updateBrowser handles browser state updates
 func (a App) updateBrowser(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -149,29 +199,34 @@ func (a App) updateBrowser(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case models.FileSelectMsg:
 		// File selected, start operation
 		a.selectedFile = msg.Path
-		menuAction := a.menuModel.SelectedAction()
+		menuAction := a.activeAction
 
 		switch menuAction {
 		case "validate":
 			return a.startValidation(msg.Path)
 		case "repair":
-			return a.startRepair(msg.Path)
-		case "batch":
-			return a.startBatch(msg.Path)
+			return a.startRepair(msg.Path, a.repairMode)
+		case "batch-validate":
+			return a.startBatchDirectory(msg.Path, operations.OperationValidate)
+		case "batch-repair":
+			return a.startBatchDirectory(msg.Path, operations.OperationRepair)
 		}
 
 	case models.MultiFileSelectMsg:
 		// Multiple files selected, start batch operation
-		menuAction := a.menuModel.SelectedAction()
+		menuAction := a.activeAction
 		switch menuAction {
-		case "validate", "repair", "batch", "multi-validate", "multi-repair":
+		case "validate", "repair", "batch-validate", "batch-repair", "multi-validate", "multi-repair":
 			return a.startBatchWithFiles(msg.Paths, menuAction)
 		}
 
 	case models.DirectorySelectMsg:
-		menuAction := a.menuModel.SelectedAction()
-		if menuAction == "batch" {
-			return a.startBatch(msg.Path)
+		menuAction := a.activeAction
+		switch menuAction {
+		case "batch-validate":
+			return a.startBatchDirectory(msg.Path, operations.OperationValidate)
+		case "batch-repair":
+			return a.startBatchDirectory(msg.Path, operations.OperationRepair)
 		}
 
 	case models.BackToMenuMsg:
@@ -248,10 +303,14 @@ func (a App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, cmd
 }
 
-func (a App) startBatch(path string) (tea.Model, tea.Cmd) {
+func (a App) startBatchDirectory(path string, opType operations.OperationType) (tea.Model, tea.Cmd) {
 	files, err := collectBatchFiles(path)
 	if err != nil {
-		a.progressModel = models.NewProgressModel("Batch Processing", path, 0, a.width, a.height)
+		title := "Batch Validation"
+		if opType == operations.OperationRepair {
+			title = "Batch Repair"
+		}
+		a.progressModel = models.NewProgressModel(title, path, 0, a.width, a.height)
 		a.state = StateProgress
 		return a, tea.Batch(
 			a.progressModel.Init(),
@@ -268,18 +327,24 @@ func (a App) startBatch(path string) (tea.Model, tea.Cmd) {
 		)
 	}
 
-	a.progressModel = models.NewProgressModel("Batch Processing", path, len(files), a.width, a.height)
+	title := "Batch Validation"
+	if opType == operations.OperationRepair {
+		title = "Batch Repair"
+	}
+	a.progressModel = models.NewProgressModel(title, path, len(files), a.width, a.height)
 	a.state = StateProgress
 
 	// Start batch processing in a goroutine to not block the UI
 	// and send the result when done.
-	batch := operations.NewBatchProcessor(a.ctx, operations.DefaultBatchConfig())
+	config := operations.DefaultBatchConfig()
+	config.RepairMode = a.repairMode
+	batch := operations.NewBatchProcessor(a.ctx, config)
 	doneCh := make(chan operations.BatchResult)
 	start := time.Now()
 
 	go func() {
-		results := batch.Execute(files, operations.OperationValidate)
-		doneCh <- operations.AggregateResults(results, time.Since(start))
+		results := batch.Execute(files, opType)
+		doneCh <- operations.AggregateResults(results, time.Since(start), opType)
 	}()
 
 	a.progressCh = batch.ProgressChannel()
@@ -305,10 +370,10 @@ func (a App) startBatchWithFiles(files []string, action string) (tea.Model, tea.
 	var opType operations.OperationType
 	title := "Batch Processing"
 	switch action {
-	case "validate", "multi-validate":
+	case "validate", "multi-validate", "batch-validate":
 		opType = operations.OperationValidate
 		title = "Batch Validation"
-	case "repair", "multi-repair":
+	case "repair", "multi-repair", "batch-repair":
 		opType = operations.OperationRepair
 		title = "Batch Repair"
 	default:
@@ -319,13 +384,15 @@ func (a App) startBatchWithFiles(files []string, action string) (tea.Model, tea.
 	a.state = StateProgress
 
 	// Start batch processing in a goroutine
-	batch := operations.NewBatchProcessor(a.ctx, operations.DefaultBatchConfig())
+	config := operations.DefaultBatchConfig()
+	config.RepairMode = a.repairMode
+	batch := operations.NewBatchProcessor(a.ctx, config)
 	doneCh := make(chan operations.BatchResult)
 	start := time.Now()
 
 	go func() {
 		results := batch.Execute(files, opType)
-		doneCh <- operations.AggregateResults(results, time.Since(start))
+		doneCh <- operations.AggregateResults(results, time.Since(start), opType)
 	}()
 
 	a.progressCh = batch.ProgressChannel()
@@ -444,7 +511,7 @@ func (a App) startValidation(filePath string) (tea.Model, tea.Cmd) {
 }
 
 // startRepair starts a repair operation
-func (a App) startRepair(filePath string) (tea.Model, tea.Cmd) {
+func (a App) startRepair(filePath string, mode operations.RepairSaveMode) (tea.Model, tea.Cmd) {
 	a.progressModel = models.NewProgressModel("Repairing", filePath, 1, a.width, a.height)
 	a.state = StateProgress
 
@@ -453,7 +520,7 @@ func (a App) startRepair(filePath string) (tea.Model, tea.Cmd) {
 		a.progressModel.Init(),
 		func() tea.Msg {
 			repairer := operations.NewRepairOperation(a.ctx)
-			result, err := repairer.Execute(filePath)
+			result, _, err := repairer.ExecuteWithSaveMode(filePath, mode, "")
 
 			if err != nil {
 				// Create error result

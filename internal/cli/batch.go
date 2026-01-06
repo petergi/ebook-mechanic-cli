@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"time"
 
@@ -26,6 +25,7 @@ type batchFlags struct {
 	inPlace         bool
 	backup          bool
 	backupDir       string
+	saveMode        string
 	continueOnError bool
 }
 
@@ -109,6 +109,9 @@ Progress is displayed in real-time showing completed/total files.`,
   # Repair with custom backup directory
   ebm batch repair ./library --in-place --backup --backup-dir ./backups
 
+  # Repair by renaming repaired files
+  ebm batch repair ./books --in-place --save-mode rename-repaired
+
   # Repair with 4 workers
   ebm batch repair ./books --in-place --jobs 4`,
 		Args: cobra.ExactArgs(1),
@@ -126,8 +129,9 @@ Progress is displayed in real-time showing completed/total files.`,
 	cmd.Flags().StringVar(&flags.progress, "progress", "auto", "Progress output mode (auto, simple, none)")
 	cmd.Flags().BoolVar(&flags.summaryOnly, "summary-only", false, "Only print summary output")
 	cmd.Flags().BoolVar(&flags.inPlace, "in-place", false, "Repair files in place")
-	cmd.Flags().BoolVar(&flags.backup, "backup", false, "Create backups before in-place repair")
+	cmd.Flags().BoolVar(&flags.backup, "backup", false, "Create backups before in-place repair (legacy alias for --save-mode backup-original)")
 	cmd.Flags().StringVar(&flags.backupDir, "backup-dir", "", "Directory for backup files")
+	cmd.Flags().StringVar(&flags.saveMode, "save-mode", "", "Save mode for in-place repairs: backup-original or rename-repaired")
 	cmd.Flags().BoolVar(&flags.continueOnError, "continue-on-error", true, "Continue processing on individual file errors")
 
 	return cmd
@@ -220,7 +224,7 @@ func runBatchValidate(ctx context.Context, dir string, flags *batchFlags, rootFl
 	}
 
 	// Aggregate results
-	batchResult := operations.AggregateResults(results, duration)
+	batchResult := operations.AggregateResults(results, duration, operations.OperationValidate)
 
 	// Create report options
 	opts, err := NewReportOptions(rootFlags)
@@ -253,9 +257,12 @@ func runBatchRepair(ctx context.Context, dir string, flags *batchFlags, rootFlag
 		return fmt.Errorf("batch repair currently only supports --in-place mode")
 	}
 
-	if flags.backup && flags.backupDir == "" {
-		// Default backup directory
-		flags.backupDir = filepath.Join(dir, "backups")
+	mode, err := resolveRepairSaveMode(flags.saveMode, flags.backup)
+	if err != nil {
+		return err
+	}
+	if mode == operations.RepairSaveModeRenameRepaired && flags.backupDir != "" {
+		return fmt.Errorf("--backup-dir is not supported with save-mode rename-repaired")
 	}
 
 	// Find all matching files
@@ -275,7 +282,7 @@ func runBatchRepair(ctx context.Context, dir string, flags *batchFlags, rootFlag
 	}
 
 	// Create backup directory if needed
-	if flags.backup {
+	if mode == operations.RepairSaveModeBackupOriginal && flags.backupDir != "" {
 		if err := os.MkdirAll(flags.backupDir, 0755); err != nil {
 			return fmt.Errorf("failed to create backup directory: %w", err)
 		}
@@ -287,6 +294,8 @@ func runBatchRepair(ctx context.Context, dir string, flags *batchFlags, rootFlag
 		QueueSize:    100,
 		ProgressRate: 100 * time.Millisecond,
 		Timeout:      time.Duration(flags.timeout) * time.Second,
+		RepairMode:   mode,
+		BackupDir:    flags.backupDir,
 	}
 	processor := operations.NewBatchProcessor(ctx, config)
 
@@ -346,7 +355,7 @@ func runBatchRepair(ctx context.Context, dir string, flags *batchFlags, rootFlag
 	}
 
 	// Aggregate results
-	batchResult := operations.AggregateResults(results, duration)
+	batchResult := operations.AggregateResults(results, duration, operations.OperationRepair)
 
 	// Create report options
 	opts, err := NewReportOptions(rootFlags)

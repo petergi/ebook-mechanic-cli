@@ -134,7 +134,7 @@ func (f *TextFormatter) FormatRepair(result *ebmlib.RepairResult, report *ebmlib
 
 	// Backup path
 	if result.BackupPath != "" {
-		b.WriteString(f.field("Backup", result.BackupPath))
+		b.WriteString(f.field(repairPathLabel(result.BackupPath), result.BackupPath))
 		b.WriteString("\n")
 	}
 
@@ -353,8 +353,11 @@ func (f *JSONFormatter) FormatValidation(report *ebmlib.ValidationReport) string
 func (f *JSONFormatter) FormatRepair(result *ebmlib.RepairResult, report *ebmlib.ValidationReport) string {
 	output := map[string]interface{}{
 		"success":         result.Success,
-		"backup_path":     result.BackupPath,
 		"actions_applied": result.ActionsApplied,
+	}
+
+	if result.BackupPath != "" {
+		output[repairPathKey(result.BackupPath)] = result.BackupPath
 	}
 
 	if result.Error != nil {
@@ -481,7 +484,7 @@ func (f *MarkdownFormatter) FormatRepair(result *ebmlib.RepairResult, report *eb
 
 	// Backup
 	if result.BackupPath != "" {
-		b.WriteString(fmt.Sprintf("**Backup:** `%s`\n\n", result.BackupPath))
+		b.WriteString(fmt.Sprintf("**%s:** `%s`\n\n", repairPathLabel(result.BackupPath), result.BackupPath))
 	}
 
 	// Actions
@@ -515,6 +518,27 @@ func (f *MarkdownFormatter) formatIssue(issue ebmlib.ValidationError) string {
 	}
 
 	return line + "\n"
+}
+
+func repairPathLabel(path string) string {
+	if isRepairedPath(path) {
+		return "Repaired File"
+	}
+	return "Backup"
+}
+
+func repairPathKey(path string) string {
+	if isRepairedPath(path) {
+		return "repaired_path"
+	}
+	return "backup_path"
+}
+
+func isRepairedPath(path string) bool {
+	base := filepath.Base(path)
+	ext := filepath.Ext(base)
+	name := strings.TrimSuffix(base, ext)
+	return strings.HasSuffix(name, "_repaired")
 }
 
 func (f *MarkdownFormatter) FormatBatchValidation(result *operations.BatchResult, summaryOnly bool) string {

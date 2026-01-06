@@ -25,8 +25,9 @@ files. It uses ebook-mechanic-lib for the core validation and repair logic.
 ## Repair
 
 1. Choose "Repair EPUB/PDF".
-2. Select a file to repair.
-3. Review the repair report.
+2. Choose how to save the repaired file.
+3. Select a file to repair.
+4. Review the repair report.
 
 ## Batch
 
@@ -37,6 +38,8 @@ files. It uses ebook-mechanic-lib for the core validation and repair logic.
 ## Reports
 
 Reports are rendered in the TUI with styled summaries and issue details.
+Repaired files follow `*_repaired` naming when using the rename option, while
+original backups use `*_original` when using the backup option.
 
 ## Related Docs
 

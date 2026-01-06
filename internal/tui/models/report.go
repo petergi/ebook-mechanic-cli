@@ -29,6 +29,9 @@ type ReportModel struct {
 	showInfo        bool
 	selectedFilter  int    // 0: all, 1: errors, 2: warnings, 3: info
 	savedReportPath string // Path where report was saved
+	saveError       error  // Error from last save attempt
+	saveStatusToken int
+	saveStatusShow  bool
 }
 
 // NewReportModel creates a new report model for validation results
@@ -222,10 +225,24 @@ func (m ReportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ReportSaveMsg:
 		if msg.Error != nil {
-			// Handle error - for now just ignore, could show error in UI
-			return m, nil
+			// Store error to display in UI
+			m.saveError = msg.Error
+			m.savedReportPath = "" // Clear any previous success
+		} else {
+			m.savedReportPath = msg.Path
+			m.saveError = nil // Clear any previous error
 		}
-		m.savedReportPath = msg.Path
+		m.saveStatusToken++
+		token := m.saveStatusToken
+		m.saveStatusShow = true
+		return m, tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+			return ReportSaveTimeoutMsg{Token: token}
+		})
+
+	case ReportSaveTimeoutMsg:
+		if msg.Token == m.saveStatusToken {
+			m.saveStatusShow = false
+		}
 		return m, nil
 	}
 
@@ -262,9 +279,9 @@ func (m ReportModel) renderValidationReport() string {
 		Width(m.width - 8).
 		Render(m.makeClickable(m.report.FilePath))
 
-	// Success message if report was saved
+	// Success or error message for save operation
 	var savedBox string
-	if m.savedReportPath != "" {
+	if m.saveStatusShow && m.savedReportPath != "" {
 		savedBox = lipgloss.NewStyle().
 			Foreground(styles.ColorSuccess).
 			Border(lipgloss.RoundedBorder()).
@@ -272,6 +289,14 @@ func (m ReportModel) renderValidationReport() string {
 			Padding(0, 1).
 			Width(m.width - 8).
 			Render(fmt.Sprintf("%s Report saved to: %s", styles.IconCheck, m.makeClickable(m.savedReportPath)))
+	} else if m.saveStatusShow && m.saveError != nil {
+		savedBox = lipgloss.NewStyle().
+			Foreground(styles.ColorError).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(styles.ColorError).
+			Padding(0, 1).
+			Width(m.width - 8).
+			Render(fmt.Sprintf("%s Error saving report: %v", styles.IconCross, m.saveError))
 	}
 
 	// Overall status in highlighted box
@@ -326,13 +351,19 @@ func (m ReportModel) renderValidationReport() string {
 				styles.RenderKeyBinding("enter", "continue"),
 		)
 
+	saveStatusLine := m.renderSaveStatusLine()
+
 	// Combine all parts
 	var parts []string
 	parts = append(parts, title, pathBox)
 	if savedBox != "" {
 		parts = append(parts, "", savedBox)
 	}
-	parts = append(parts, "", statusBox, "", summaryBox, filters, issuesBox, helpBox)
+	parts = append(parts, "", statusBox, "", summaryBox, filters, issuesBox)
+	if saveStatusLine != "" {
+		parts = append(parts, "", saveStatusLine)
+	}
+	parts = append(parts, helpBox)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
@@ -360,7 +391,7 @@ func (m ReportModel) renderRepairReport() string {
 		statusText = styles.IconCheck + "  Repair successful!"
 		statusColor = styles.ColorSuccess
 		if m.repairResult.BackupPath != "" {
-			statusText += "\n\n" + "Backup created at:\n" + m.makeClickable(m.repairResult.BackupPath)
+			statusText += "\n\n" + repairArtifactTitle(m.repairResult.BackupPath) + "\n" + m.makeClickable(m.repairResult.BackupPath)
 		}
 	} else {
 		statusText = styles.IconCross + "  Repair failed"
@@ -378,9 +409,9 @@ func (m ReportModel) renderRepairReport() string {
 		Width(m.width - 8).
 		Render(statusText)
 
-	// Success message if report was saved
+	// Success or error message for save operation
 	var savedBox string
-	if m.savedReportPath != "" {
+	if m.saveStatusShow && m.savedReportPath != "" {
 		savedBox = lipgloss.NewStyle().
 			Foreground(styles.ColorSuccess).
 			Border(lipgloss.RoundedBorder()).
@@ -388,6 +419,14 @@ func (m ReportModel) renderRepairReport() string {
 			Padding(0, 1).
 			Width(m.width - 8).
 			Render(fmt.Sprintf("%s Report saved to: %s", styles.IconCheck, m.makeClickable(m.savedReportPath)))
+	} else if m.saveStatusShow && m.saveError != nil {
+		savedBox = lipgloss.NewStyle().
+			Foreground(styles.ColorError).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(styles.ColorError).
+			Padding(0, 1).
+			Width(m.width - 8).
+			Render(fmt.Sprintf("%s Error saving report: %v", styles.IconCross, m.saveError))
 	}
 
 	// Actions applied in a bordered box
@@ -413,6 +452,44 @@ func (m ReportModel) renderRepairReport() string {
 			)
 	}
 
+	// Scrollable details view
+	var detailParts []string
+	detailParts = append(detailParts, statusBox)
+	if actionsBox != "" {
+		detailParts = append(detailParts, "", actionsBox)
+	}
+
+	detailsContent := strings.Join(detailParts, "\n")
+	lines := strings.Split(detailsContent, "\n")
+	start := m.viewportTop
+	end := m.viewportTop + m.viewportSize
+	if end > len(lines) {
+		end = len(lines)
+	}
+	if start >= len(lines) {
+		m.viewportTop = len(lines) - m.viewportSize
+		if m.viewportTop < 0 {
+			m.viewportTop = 0
+		}
+		start = m.viewportTop
+	}
+	visibleLines := lines[start:end]
+	detailsContent = strings.Join(visibleLines, "\n")
+
+	if len(lines) > m.viewportSize {
+		if m.viewportTop > 0 {
+			detailsContent = styles.MutedStyle.Render("↑ more ↑") + "\n" + detailsContent
+		}
+		if end < len(lines) {
+			detailsContent = detailsContent + "\n" + styles.MutedStyle.Render("↓ more ↓")
+		}
+	}
+
+	detailsBox := styles.BorderStyle.
+		Width(m.width - 8).
+		Height(m.viewportSize + 2).
+		Render(detailsContent)
+
 	// Help text
 	helpBox := lipgloss.NewStyle().
 		Foreground(styles.ColorMuted).
@@ -425,15 +502,17 @@ func (m ReportModel) renderRepairReport() string {
 				styles.RenderKeyBinding("enter", "continue"),
 		)
 
+	saveStatusLine := m.renderSaveStatusLine()
+
 	// Combine all parts
 	var parts []string
 	parts = append(parts, title)
 	if savedBox != "" {
 		parts = append(parts, "", savedBox)
 	}
-	parts = append(parts, "", statusBox)
-	if actionsBox != "" {
-		parts = append(parts, "", actionsBox)
+	parts = append(parts, "", detailsBox)
+	if saveStatusLine != "" {
+		parts = append(parts, "", saveStatusLine)
 	}
 	parts = append(parts, "", helpBox)
 
@@ -443,7 +522,7 @@ func (m ReportModel) renderRepairReport() string {
 		m.width,
 		m.height,
 		lipgloss.Center,
-		lipgloss.Center,
+		lipgloss.Top,
 		content,
 	)
 }
@@ -455,15 +534,33 @@ func (m ReportModel) renderBatchReport() string {
 
 	title := styles.RenderTitle("📦 Batch Report")
 
-	// Status in highlighted box
+	// Status in highlighted box - operation-aware
 	var statusText string
 	var statusColor lipgloss.AdaptiveColor
-	if len(m.batchResult.Invalid) == 0 && len(m.batchResult.Errored) == 0 {
-		statusText = styles.IconCheck + "  All files processed successfully!"
-		statusColor = styles.ColorSuccess
+
+	if m.batchResult.Operation == "repair" {
+		// Repair operation status
+		if m.batchResult.RepairsSucceeded == m.batchResult.RepairsAttempted && len(m.batchResult.Errored) == 0 {
+			statusText = fmt.Sprintf("%s  All repairs successful! (%d/%d)", styles.IconCheck, m.batchResult.RepairsSucceeded, m.batchResult.RepairsAttempted)
+			statusColor = styles.ColorSuccess
+		} else {
+			statusText = fmt.Sprintf("%s  %d/%d repairs succeeded, %d failed, %d system error(s)",
+				styles.IconCross,
+				m.batchResult.RepairsSucceeded,
+				m.batchResult.RepairsAttempted,
+				m.batchResult.RepairsAttempted-m.batchResult.RepairsSucceeded,
+				len(m.batchResult.Errored))
+			statusColor = styles.ColorError
+		}
 	} else {
-		statusText = fmt.Sprintf("%s  Found %d invalid and %d system error(s)", styles.IconCross, len(m.batchResult.Invalid), len(m.batchResult.Errored))
-		statusColor = styles.ColorError
+		// Validation operation status
+		if len(m.batchResult.Invalid) == 0 && len(m.batchResult.Errored) == 0 {
+			statusText = styles.IconCheck + "  All files processed successfully!"
+			statusColor = styles.ColorSuccess
+		} else {
+			statusText = fmt.Sprintf("%s  Found %d invalid and %d system error(s)", styles.IconCross, len(m.batchResult.Invalid), len(m.batchResult.Errored))
+			statusColor = styles.ColorError
+		}
 	}
 
 	statusBox := lipgloss.NewStyle().
@@ -474,14 +571,49 @@ func (m ReportModel) renderBatchReport() string {
 		Width(m.width - 8).
 		Render(statusText)
 
-	// Summary
+	// Success or error message for save operation
+	var savedBox string
+	if m.saveStatusShow && m.savedReportPath != "" {
+		savedBox = lipgloss.NewStyle().
+			Foreground(styles.ColorSuccess).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(styles.ColorSuccess).
+			Padding(0, 1).
+			Width(m.width - 8).
+			Render(fmt.Sprintf("%s Report saved to: %s", styles.IconCheck, m.makeClickable(m.savedReportPath)))
+	} else if m.saveStatusShow && m.saveError != nil {
+		savedBox = lipgloss.NewStyle().
+			Foreground(styles.ColorError).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(styles.ColorError).
+			Padding(0, 1).
+			Width(m.width - 8).
+			Render(fmt.Sprintf("%s Error saving report: %v", styles.IconCross, m.saveError))
+	}
+
+	// Summary - different for repair vs validation
 	headers := []string{"Metric", "Value"}
-	rows := [][]string{
-		{"Total Files", fmt.Sprintf("%d", m.batchResult.Total)},
-		{"Valid", fmt.Sprintf("%d", len(m.batchResult.Valid))},
-		{"Invalid", fmt.Sprintf("%d", len(m.batchResult.Invalid))},
-		{"System Errors", fmt.Sprintf("%d", len(m.batchResult.Errored))},
-		{"Duration", m.batchResult.Duration.Round(time.Millisecond).String()},
+	var rows [][]string
+
+	if m.batchResult.Operation == "repair" {
+		// Repair operation - show repair-specific metrics
+		rows = [][]string{
+			{"Total Files", fmt.Sprintf("%d", m.batchResult.Total)},
+			{"Repairs Attempted", fmt.Sprintf("%d", m.batchResult.RepairsAttempted)},
+			{"Repairs Succeeded", fmt.Sprintf("%d", m.batchResult.RepairsSucceeded)},
+			{"Repairs Failed", fmt.Sprintf("%d", m.batchResult.RepairsAttempted-m.batchResult.RepairsSucceeded)},
+			{"System Errors", fmt.Sprintf("%d", len(m.batchResult.Errored))},
+			{"Duration", m.batchResult.Duration.Round(time.Millisecond).String()},
+		}
+	} else {
+		// Validation operation - show validation metrics
+		rows = [][]string{
+			{"Total Files", fmt.Sprintf("%d", m.batchResult.Total)},
+			{"Valid", fmt.Sprintf("%d", len(m.batchResult.Valid))},
+			{"Invalid", fmt.Sprintf("%d", len(m.batchResult.Invalid))},
+			{"System Errors", fmt.Sprintf("%d", len(m.batchResult.Errored))},
+			{"Duration", m.batchResult.Duration.Round(time.Millisecond).String()},
+		}
 	}
 	summaryContent := styles.RenderTable(headers, rows)
 	summaryBox := lipgloss.NewStyle().
@@ -576,8 +708,21 @@ func (m ReportModel) renderBatchReport() string {
 				styles.RenderKeyBinding("enter", "continue"),
 		)
 
+	saveStatusLine := m.renderSaveStatusLine()
+
 	// Combine all parts
-	content := lipgloss.JoinVertical(lipgloss.Left, title, statusBox, "", summaryBox, filters, listBox, helpBox)
+	var parts []string
+	parts = append(parts, title)
+	if savedBox != "" {
+		parts = append(parts, "", savedBox)
+	}
+	parts = append(parts, "", statusBox, "", summaryBox, filters, listBox)
+	if saveStatusLine != "" {
+		parts = append(parts, "", saveStatusLine)
+	}
+	parts = append(parts, helpBox)
+
+	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
 	return lipgloss.Place(
 		m.width,
@@ -794,6 +939,37 @@ func (m ReportModel) makeClickable(path string) string {
 	return fmt.Sprintf("\x1b]8;;%s\x1b\\%s\x1b]8;;\x1b\\", fileURL, path)
 }
 
+func (m ReportModel) renderSaveStatusLine() string {
+	if m.saveStatusShow && m.savedReportPath != "" {
+		return styles.SuccessStyle.Render(fmt.Sprintf("%s Saved report: %s", styles.IconCheck, m.makeClickable(m.savedReportPath)))
+	}
+	if m.saveStatusShow && m.saveError != nil {
+		return styles.ErrorStyle.Render(fmt.Sprintf("%s Error saving report: %v", styles.IconCross, m.saveError))
+	}
+	return ""
+}
+
+func repairArtifactTitle(path string) string {
+	if isRepairedPath(path) {
+		return "Repaired file created at:"
+	}
+	return "Backup created at:"
+}
+
+func repairArtifactLabel(path string) string {
+	if isRepairedPath(path) {
+		return "Repaired File"
+	}
+	return "Backup"
+}
+
+func isRepairedPath(path string) bool {
+	base := filepath.Base(path)
+	ext := filepath.Ext(base)
+	name := strings.TrimSuffix(base, ext)
+	return strings.HasSuffix(name, "_repaired")
+}
+
 func (m ReportModel) saveReport() (string, error) {
 	// Create reports directory
 	reportDir := "reports"
@@ -821,7 +997,7 @@ func (m ReportModel) saveReport() (string, error) {
 			}
 		}
 		if m.repairResult.BackupPath != "" {
-			b.WriteString(fmt.Sprintf("Backup: %s\n", m.repairResult.BackupPath))
+			b.WriteString(fmt.Sprintf("%s: %s\n", repairArtifactLabel(m.repairResult.BackupPath), m.repairResult.BackupPath))
 		}
 		b.WriteString("\nActions Applied:\n")
 		for _, action := range m.repairResult.ActionsApplied {
@@ -831,12 +1007,23 @@ func (m ReportModel) saveReport() (string, error) {
 	case "batch":
 		filename = fmt.Sprintf("batch-%s.txt", timestamp)
 		var b strings.Builder
-		b.WriteString("=== Batch Report ===\n\n")
-		b.WriteString(fmt.Sprintf("Total Files: %d\n", m.batchResult.Total))
-		b.WriteString(fmt.Sprintf("Valid: %d\n", len(m.batchResult.Valid)))
-		b.WriteString(fmt.Sprintf("Invalid: %d\n", len(m.batchResult.Invalid)))
-		b.WriteString(fmt.Sprintf("System Errors: %d\n", len(m.batchResult.Errored)))
-		b.WriteString(fmt.Sprintf("Duration: %v\n\n", m.batchResult.Duration))
+
+		if m.batchResult.Operation == "repair" {
+			b.WriteString("=== Batch Repair Report ===\n\n")
+			b.WriteString(fmt.Sprintf("Total Files: %d\n", m.batchResult.Total))
+			b.WriteString(fmt.Sprintf("Repairs Attempted: %d\n", m.batchResult.RepairsAttempted))
+			b.WriteString(fmt.Sprintf("Repairs Succeeded: %d\n", m.batchResult.RepairsSucceeded))
+			b.WriteString(fmt.Sprintf("Repairs Failed: %d\n", m.batchResult.RepairsAttempted-m.batchResult.RepairsSucceeded))
+			b.WriteString(fmt.Sprintf("System Errors: %d\n", len(m.batchResult.Errored)))
+			b.WriteString(fmt.Sprintf("Duration: %v\n\n", m.batchResult.Duration))
+		} else {
+			b.WriteString("=== Batch Validation Report ===\n\n")
+			b.WriteString(fmt.Sprintf("Total Files: %d\n", m.batchResult.Total))
+			b.WriteString(fmt.Sprintf("Valid: %d\n", len(m.batchResult.Valid)))
+			b.WriteString(fmt.Sprintf("Invalid: %d\n", len(m.batchResult.Invalid)))
+			b.WriteString(fmt.Sprintf("System Errors: %d\n", len(m.batchResult.Errored)))
+			b.WriteString(fmt.Sprintf("Duration: %v\n\n", m.batchResult.Duration))
+		}
 
 		if len(m.batchResult.Errored) > 0 {
 			b.WriteString("System Errors:\n")
@@ -895,11 +1082,21 @@ func (m ReportModel) saveReport() (string, error) {
 		return "", err
 	}
 
-	return path, nil
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return path, nil
+	}
+
+	return absPath, nil
 }
 
 // ReportSaveMsg is sent when a report is saved
 type ReportSaveMsg struct {
 	Path  string
 	Error error
+}
+
+// ReportSaveTimeoutMsg hides save status after a delay.
+type ReportSaveTimeoutMsg struct {
+	Token int
 }
