@@ -96,9 +96,9 @@ func TestAppUpdateMenu_SelectActions(t *testing.T) {
 		state  AppState
 	}{
 		{"validate", "validate", StateBrowser},
-		{"repair", "repair", StateRepairMode},
+		{"repair", "repair", StateBrowser},
 		{"batch-validate", "batch-validate", StateBrowser},
-		{"batch-repair", "batch-repair", StateRepairMode},
+		{"batch-repair", "batch-repair", StateBrowser},
 		{"settings", "settings", StateSettings},
 	}
 
@@ -176,32 +176,12 @@ func TestAppUpdateBrowser_DelegatesToBrowserModel(t *testing.T) {
 	}
 }
 
-func TestAppUpdateRepairMode_Select(t *testing.T) {
-	app := NewApp()
-	app.state = StateRepairMode
-	app.activeAction = "repair"
-	app.repairModel = models.NewRepairModeModel(80, 24)
-
-	model, cmd := app.Update(models.RepairModeSelectMsg{Mode: models.RepairSaveModeRenameRepaired})
-	updated := model.(App)
-
-	if updated.state != StateBrowser {
-		t.Errorf("expected state to be StateBrowser, got %v", updated.state)
-	}
-	if updated.repairMode != operations.RepairSaveModeRenameRepaired {
-		t.Errorf("expected repair mode rename-repaired, got %s", updated.repairMode)
-	}
-	if cmd != nil {
-		t.Error("expected no command from browser init")
-	}
-}
-
 func TestAppUpdateSettings_Save(t *testing.T) {
 	app := NewApp()
 	app.state = StateSettings
-	app.settingsModel = models.NewSettingsModel(2, true, 80, 24)
+	app.settingsModel = models.NewSettingsModel(2, true, true, true, 80, 24)
 
-	model, _ := app.Update(models.SettingsSaveMsg{Jobs: 6, SkipValidation: false})
+	model, _ := app.Update(models.SettingsSaveMsg{Jobs: 6, SkipValidation: false, NoBackup: true, Aggressive: true})
 	updated := model.(App)
 
 	if updated.state != StateMenu {
@@ -212,6 +192,9 @@ func TestAppUpdateSettings_Save(t *testing.T) {
 	}
 	if updated.skipValidation {
 		t.Error("expected skipValidation false")
+	}
+	if !updated.noBackup {
+		t.Error("expected noBackup true")
 	}
 }
 
@@ -519,7 +502,7 @@ func TestAppUpdateMenu_MultiSelectActions(t *testing.T) {
 		state  AppState
 	}{
 		{"multi-validate", "multi-validate", StateBrowser},
-		{"multi-repair", "multi-repair", StateRepairMode},
+		{"multi-repair", "multi-repair", StateBrowser},
 	}
 
 	for _, tt := range tests {

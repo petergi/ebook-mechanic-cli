@@ -33,6 +33,9 @@ test-library/
 .specstory/
 project_file_tree_*.md
 LTM.md
+.serena/
+gemeni-agent-stats.txt
+reports/
 
 # Swift
 Package.resolved

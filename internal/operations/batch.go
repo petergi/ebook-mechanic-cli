@@ -31,6 +31,7 @@ type BatchConfig struct {
 	Timeout      time.Duration // Per-file operation timeout
 	RepairMode   RepairSaveMode
 	BackupDir    string
+	Aggressive   bool
 }
 
 // FindFilesOptions configures file discovery for batch operations
@@ -277,7 +278,7 @@ func (bp *BatchProcessor) processTask(task Task) Result {
 		result.Error = err
 
 	case OperationRepair:
-		repairer := NewRepairOperation(ctx)
+		repairer := NewRepairOperation(ctx).WithAggressive(bp.config.Aggressive)
 		mode := bp.config.RepairMode
 		if mode == "" {
 			mode = RepairSaveModeBackupOriginal
@@ -350,6 +351,7 @@ type BatchResult struct {
 	Operation        OperationType // The operation that was performed
 	RepairsAttempted int           // Number of repair attempts (for repair operations)
 	RepairsSucceeded int           // Number of successful repairs (for repair operations)
+	RepairsNoOp      int           // Number of successful no-op repairs (no actions applied)
 }
 
 // AggregateResults aggregates a list of results into a BatchResult
@@ -383,11 +385,18 @@ func AggregateResults(results []Result, duration time.Duration, operation Operat
 			}
 		} else if r.Repair != nil {
 			// This is a repair result
-			br.RepairsAttempted++
+			applied := len(r.Repair.ActionsApplied) > 0
+			if applied {
+				br.RepairsAttempted++
+			}
 			if r.Repair.Success {
 				br.Valid = append(br.Valid, r)
 				br.Successful = append(br.Successful, r)
-				br.RepairsSucceeded++
+				if applied {
+					br.RepairsSucceeded++
+				} else {
+					br.RepairsNoOp++
+				}
 			} else {
 				br.Invalid = append(br.Invalid, r)
 				br.Failed = append(br.Failed, r)

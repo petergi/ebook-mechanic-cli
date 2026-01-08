@@ -18,6 +18,8 @@ const (
 type SettingsModel struct {
 	jobs           int
 	skipValidation bool
+	noBackup       bool
+	aggressive     bool
 	selected       int
 	width          int
 	height         int
@@ -27,10 +29,12 @@ type SettingsModel struct {
 type SettingsSaveMsg struct {
 	Jobs           int
 	SkipValidation bool
+	NoBackup       bool
+	Aggressive     bool
 }
 
 // NewSettingsModel creates a new settings model.
-func NewSettingsModel(jobs int, skipValidation bool, width, height int) SettingsModel {
+func NewSettingsModel(jobs int, skipValidation bool, noBackup bool, aggressive bool, width, height int) SettingsModel {
 	if width == 0 {
 		width = 80
 	}
@@ -47,6 +51,8 @@ func NewSettingsModel(jobs int, skipValidation bool, width, height int) Settings
 	return SettingsModel{
 		jobs:           jobs,
 		skipValidation: skipValidation,
+		noBackup:       noBackup,
+		aggressive:     aggressive,
 		selected:       0,
 		width:          width,
 		height:         height,
@@ -72,21 +78,21 @@ func (m SettingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "up", "k":
 			m.selected--
 			if m.selected < 0 {
-				m.selected = 2
+				m.selected = 4
 			}
 		case "down", "j":
 			m.selected++
-			if m.selected > 2 {
+			if m.selected > 4 {
 				m.selected = 0
 			}
-		case "-":
+		case "left", "h", "-", "_", "kp-":
 			if m.selected == 0 {
 				m.jobs--
 				if m.jobs < settingsMinJobs {
 					m.jobs = settingsMinJobs
 				}
 			}
-		case "+":
+		case "right", "l", "+", "=", "kp+":
 			if m.selected == 0 {
 				m.jobs++
 				if m.jobs > settingsMaxJobs {
@@ -94,16 +100,25 @@ func (m SettingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case " ":
-			if m.selected == 1 {
+			switch m.selected {
+			case 1:
 				m.skipValidation = !m.skipValidation
+			case 2:
+				m.noBackup = !m.noBackup
+			case 3:
+				m.aggressive = !m.aggressive
 			}
 		case "enter":
 			switch m.selected {
 			case 1:
 				m.skipValidation = !m.skipValidation
 			case 2:
+				m.noBackup = !m.noBackup
+			case 3:
+				m.aggressive = !m.aggressive
+			case 4:
 				return m, func() tea.Msg {
-					return SettingsSaveMsg{Jobs: m.jobs, SkipValidation: m.skipValidation}
+					return SettingsSaveMsg{Jobs: m.jobs, SkipValidation: m.skipValidation, NoBackup: m.noBackup, Aggressive: m.aggressive}
 				}
 			}
 		case "esc", "q":
@@ -123,9 +138,11 @@ func (m SettingsModel) View() string {
 
 	jobsLabel := fmt.Sprintf("Batch jobs: %d", m.jobs)
 	validationLabel := fmt.Sprintf("Skip post-repair validation: %v", m.skipValidation)
+	backupLabel := fmt.Sprintf("No backup (in-place): %v", m.noBackup)
+	aggressiveLabel := fmt.Sprintf("Aggressive repair: %v", m.aggressive)
 	doneLabel := "Done"
 
-	items := []string{jobsLabel, validationLabel, doneLabel}
+	items := []string{jobsLabel, validationLabel, backupLabel, aggressiveLabel, doneLabel}
 	var rendered string
 	for i, item := range items {
 		cursor := "  "
@@ -141,13 +158,16 @@ func (m SettingsModel) View() string {
 	}
 
 	note := styles.MutedStyle.Render("Tip: Use +/- only on the Batch jobs row.")
+	warning := styles.ErrorStyle.Render("Warning: No backup permanently overwrites the original file.")
+	aggressiveWarning := styles.WarningStyle.Render("Warning: Aggressive repair may drop content or reorder sections.")
 
 	settingsBox := styles.BorderStyle.
 		Width(70).
-		Render(rendered + "\n" + note)
+		Render(rendered + "\n" + note + "\n" + warning + "\n" + aggressiveWarning)
 
 	helpText := styles.RenderKeyBinding("↑/↓", "navigate") + "  " +
 		styles.RenderKeyBinding("+/-", "change jobs") + "  " +
+		styles.RenderKeyBinding("←/→", "adjust jobs") + "  " +
 		styles.RenderKeyBinding("space", "toggle") + "  " +
 		styles.RenderKeyBinding("enter", "select") + "  " +
 		styles.RenderKeyBinding("esc", "back")

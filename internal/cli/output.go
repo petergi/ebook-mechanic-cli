@@ -134,7 +134,7 @@ func (f *TextFormatter) FormatRepair(result *ebmlib.RepairResult, report *ebmlib
 
 	// Backup path
 	if result.BackupPath != "" {
-		b.WriteString(f.field(repairPathLabel(result.BackupPath), result.BackupPath))
+		b.WriteString(f.field("Backup", result.BackupPath))
 		b.WriteString("\n")
 	}
 
@@ -296,6 +296,9 @@ func (f *TextFormatter) FormatBatchRepair(result *operations.BatchResult, summar
 	b.WriteString(f.field("Total Files", fmt.Sprintf("%d", result.Total)))
 	b.WriteString(f.field("Successfully Repaired", fmt.Sprintf("%d", len(result.Valid))))
 	b.WriteString(f.field("Repair Failed", fmt.Sprintf("%d", len(result.Invalid))))
+	if result.RepairsNoOp > 0 {
+		b.WriteString(f.field("No-Op Repairs", fmt.Sprintf("%d", result.RepairsNoOp)))
+	}
 	if len(result.Errored) > 0 {
 		b.WriteString(f.field("System Errors", fmt.Sprintf("%d", len(result.Errored))))
 	}
@@ -357,7 +360,7 @@ func (f *JSONFormatter) FormatRepair(result *ebmlib.RepairResult, report *ebmlib
 	}
 
 	if result.BackupPath != "" {
-		output[repairPathKey(result.BackupPath)] = result.BackupPath
+		output["backup_path"] = result.BackupPath
 	}
 
 	if result.Error != nil {
@@ -380,6 +383,7 @@ func (f *JSONFormatter) FormatBatchValidation(result *operations.BatchResult, su
 		"total":      result.Total,
 		"successful": len(result.Successful),
 		"failed":     len(result.Failed),
+		"no_op":      result.RepairsNoOp,
 		"duration":   result.Duration.Milliseconds(),
 	}
 
@@ -484,7 +488,7 @@ func (f *MarkdownFormatter) FormatRepair(result *ebmlib.RepairResult, report *eb
 
 	// Backup
 	if result.BackupPath != "" {
-		b.WriteString(fmt.Sprintf("**%s:** `%s`\n\n", repairPathLabel(result.BackupPath), result.BackupPath))
+		b.WriteString(fmt.Sprintf("**Backup:** `%s`\n\n", result.BackupPath))
 	}
 
 	// Actions
@@ -520,27 +524,6 @@ func (f *MarkdownFormatter) formatIssue(issue ebmlib.ValidationError) string {
 	return line + "\n"
 }
 
-func repairPathLabel(path string) string {
-	if isRepairedPath(path) {
-		return "Repaired File"
-	}
-	return "Backup"
-}
-
-func repairPathKey(path string) string {
-	if isRepairedPath(path) {
-		return "repaired_path"
-	}
-	return "backup_path"
-}
-
-func isRepairedPath(path string) bool {
-	base := filepath.Base(path)
-	ext := filepath.Ext(base)
-	name := strings.TrimSuffix(base, ext)
-	return strings.HasSuffix(name, "_repaired")
-}
-
 func (f *MarkdownFormatter) FormatBatchValidation(result *operations.BatchResult, summaryOnly bool) string {
 	var b strings.Builder
 
@@ -554,6 +537,9 @@ func (f *MarkdownFormatter) FormatBatchValidation(result *operations.BatchResult
 	b.WriteString(fmt.Sprintf("| Total Files | %d |\n", result.Total))
 	b.WriteString(fmt.Sprintf("| Successful | %d |\n", len(result.Successful)))
 	b.WriteString(fmt.Sprintf("| Failed | %d |\n", len(result.Failed)))
+	if result.RepairsNoOp > 0 {
+		b.WriteString(fmt.Sprintf("| No-Op Repairs | %d |\n", result.RepairsNoOp))
+	}
 	b.WriteString(fmt.Sprintf("| Duration | %s |\n\n", result.Duration.Round(time.Millisecond)))
 
 	// Status

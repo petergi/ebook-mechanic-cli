@@ -9,6 +9,18 @@ files. It uses ebook-mechanic-lib for the core validation and repair logic.
 ./build/ebm-cli
 ```
 
+To install the CLI:
+
+```bash
+make install-cli
+```
+
+To uninstall:
+
+```bash
+make uninstall-cli
+```
+
 ## Navigation
 
 - Use `↑/↓` or `j/k` to move.
@@ -22,6 +34,7 @@ Open Settings from the main menu to adjust:
 
 - Batch job count for concurrent processing.
 - Skip post-repair validation to speed up repairs (default: validation enabled).
+- Aggressive repair mode (shows a warning when enabled).
 
 ## Validate
 
@@ -36,6 +49,9 @@ Open Settings from the main menu to adjust:
 3. Select a file to repair.
 4. Review the repair report.
 
+When aggressive repair is enabled, the tool may drop content or reorder sections
+to make an EPUB or PDF valid.
+
 ## Batch
 
 1. Choose "Batch Process".
@@ -45,8 +61,7 @@ Open Settings from the main menu to adjust:
 ## Reports
 
 Reports are rendered in the TUI with styled summaries and issue details.
-Repaired files follow `*_repaired` naming when using the rename option, while
-original backups use `*_original` when using the backup option (default).
+Original backups use `*_original` when using the backup option (default).
 Choose "No backup (in-place)" to repair without creating a backup.
 
 ## Related Docs

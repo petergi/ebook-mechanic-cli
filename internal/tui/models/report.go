@@ -398,7 +398,7 @@ func (m ReportModel) renderRepairReport() string {
 		statusText = styles.IconCheck + "  Repair successful!"
 		statusColor = styles.ColorSuccess
 		if m.repairResult.BackupPath != "" {
-			statusText += "\n\n" + repairArtifactTitle(m.repairResult.BackupPath) + "\n" + m.makeClickable(m.repairResult.BackupPath)
+			statusText += "\n\n" + "Backup created at:\n" + m.makeClickable(m.repairResult.BackupPath)
 		}
 	} else {
 		statusText = styles.IconCross + "  Repair failed"
@@ -552,15 +552,26 @@ func (m ReportModel) renderBatchReport() string {
 
 	if m.batchResult.Operation == "repair" {
 		// Repair operation status
-		if m.batchResult.RepairsSucceeded == m.batchResult.RepairsAttempted && len(m.batchResult.Errored) == 0 {
-			statusText = fmt.Sprintf("%s  All repairs successful! (%d/%d)", styles.IconCheck, m.batchResult.RepairsSucceeded, m.batchResult.RepairsAttempted)
+		repairFailed := m.batchResult.RepairsAttempted - m.batchResult.RepairsSucceeded
+		if repairFailed == 0 && len(m.batchResult.Errored) == 0 {
+			if m.batchResult.RepairsAttempted == 0 && m.batchResult.RepairsNoOp > 0 {
+				statusText = fmt.Sprintf("%s  No repairs needed (%d no-op)", styles.IconCheck, m.batchResult.RepairsNoOp)
+			} else if m.batchResult.RepairsNoOp > 0 {
+				statusText = fmt.Sprintf("%s  All repairs successful! (%d/%d, %d no-op)",
+					styles.IconCheck,
+					m.batchResult.RepairsSucceeded,
+					m.batchResult.RepairsAttempted,
+					m.batchResult.RepairsNoOp)
+			} else {
+				statusText = fmt.Sprintf("%s  All repairs successful! (%d/%d)", styles.IconCheck, m.batchResult.RepairsSucceeded, m.batchResult.RepairsAttempted)
+			}
 			statusColor = styles.ColorSuccess
 		} else {
 			statusText = fmt.Sprintf("%s  %d/%d repairs succeeded, %d failed, %d system error(s)",
 				styles.IconCross,
 				m.batchResult.RepairsSucceeded,
 				m.batchResult.RepairsAttempted,
-				m.batchResult.RepairsAttempted-m.batchResult.RepairsSucceeded,
+				repairFailed,
 				len(m.batchResult.Errored))
 			statusColor = styles.ColorError
 		}
@@ -614,6 +625,7 @@ func (m ReportModel) renderBatchReport() string {
 			{"Repairs Attempted", fmt.Sprintf("%d", m.batchResult.RepairsAttempted)},
 			{"Repairs Succeeded", fmt.Sprintf("%d", m.batchResult.RepairsSucceeded)},
 			{"Repairs Failed", fmt.Sprintf("%d", m.batchResult.RepairsAttempted-m.batchResult.RepairsSucceeded)},
+			{"Repairs No-Op", fmt.Sprintf("%d", m.batchResult.RepairsNoOp)},
 			{"System Errors", fmt.Sprintf("%d", len(m.batchResult.Errored))},
 			{"Duration", m.batchResult.Duration.Round(time.Millisecond).String()},
 		}
@@ -996,27 +1008,6 @@ func (m ReportModel) renderRepairValidationBox() string {
 		Render(content)
 }
 
-func repairArtifactTitle(path string) string {
-	if isRepairedPath(path) {
-		return "Repaired file created at:"
-	}
-	return "Backup created at:"
-}
-
-func repairArtifactLabel(path string) string {
-	if isRepairedPath(path) {
-		return "Repaired File"
-	}
-	return "Backup"
-}
-
-func isRepairedPath(path string) bool {
-	base := filepath.Base(path)
-	ext := filepath.Ext(base)
-	name := strings.TrimSuffix(base, ext)
-	return strings.HasSuffix(name, "_repaired")
-}
-
 func (m ReportModel) saveReport() (string, error) {
 	// Create reports directory
 	reportDir := "reports"
@@ -1044,7 +1035,7 @@ func (m ReportModel) saveReport() (string, error) {
 			}
 		}
 		if m.repairResult.BackupPath != "" {
-			b.WriteString(fmt.Sprintf("%s: %s\n", repairArtifactLabel(m.repairResult.BackupPath), m.repairResult.BackupPath))
+			b.WriteString(fmt.Sprintf("Backup: %s\n", m.repairResult.BackupPath))
 		}
 		b.WriteString("\nActions Applied:\n")
 		for _, action := range m.repairResult.ActionsApplied {
@@ -1061,6 +1052,7 @@ func (m ReportModel) saveReport() (string, error) {
 			b.WriteString(fmt.Sprintf("Repairs Attempted: %d\n", m.batchResult.RepairsAttempted))
 			b.WriteString(fmt.Sprintf("Repairs Succeeded: %d\n", m.batchResult.RepairsSucceeded))
 			b.WriteString(fmt.Sprintf("Repairs Failed: %d\n", m.batchResult.RepairsAttempted-m.batchResult.RepairsSucceeded))
+			b.WriteString(fmt.Sprintf("Repairs No-Op: %d\n", m.batchResult.RepairsNoOp))
 			b.WriteString(fmt.Sprintf("System Errors: %d\n", len(m.batchResult.Errored)))
 			b.WriteString(fmt.Sprintf("Duration: %v\n\n", m.batchResult.Duration))
 		} else {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -13,12 +12,10 @@ import (
 )
 
 type repairFlags struct {
-	output       string
-	inPlace      bool
-	backup       bool
 	backupDir    string
-	saveMode     string
 	skipValidate bool
+	noBackup     bool
+	aggressive   bool
 }
 
 func newRepairCmd(rootFlags *RootFlags) *cobra.Command {
@@ -29,61 +26,39 @@ func newRepairCmd(rootFlags *RootFlags) *cobra.Command {
 		Short: "Repair a single EPUB or PDF file",
 		Long: `Repair an EPUB or PDF file by fixing detected issues.
 
-The repaired file can be written to a new location or replace the original.
-Automatic backups are supported before in-place repairs.`,
-		Example: `  # Repair to a new file
-  ebm repair book.epub --output fixed.epub
-
-  # Repair in-place with backup
-  ebm repair book.epub --in-place --backup
+Repairs run in-place by default. Backups are created unless disabled.`,
+		Example: `  # Repair in-place with backup (default)
+  ebm repair book.epub
 
   # Repair with custom backup directory
-  ebm repair book.epub --in-place --backup --backup-dir ./backups
+  ebm repair book.epub --backup-dir ./backups
 
-  # Repair by renaming the repaired file
-  ebm repair book.epub --in-place --save-mode rename-repaired
+  # Repair without backup
+  ebm repair book.epub --no-backup
 
   # Repair without post-validation
-  ebm repair book.epub --in-place --skip-validate
-
-  # Repair with JSON report
-  ebm repair book.epub --output fixed.epub --format json`,
+  ebm repair book.epub --skip-validate`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRepair(cmd.Context(), args[0], flags, rootFlags)
 		},
 	}
 
-	cmd.Flags().StringVarP(&flags.output, "output", "o", "", "Output path for repaired file")
-	cmd.Flags().BoolVar(&flags.inPlace, "in-place", false, "Repair file in place (replaces original)")
-	cmd.Flags().BoolVar(&flags.backup, "backup", false, "Create backup before in-place repair (legacy alias for --save-mode backup-original)")
 	cmd.Flags().StringVar(&flags.backupDir, "backup-dir", "", "Directory for backup files (default: same as input)")
-	cmd.Flags().StringVar(&flags.saveMode, "save-mode", "", "Save mode for in-place repairs: backup-original, rename-repaired, or no-backup")
 	cmd.Flags().BoolVar(&flags.skipValidate, "skip-validate", false, "Skip post-repair validation")
+	cmd.Flags().BoolVar(&flags.noBackup, "no-backup", false, "Skip backup before in-place repair")
+	cmd.Flags().BoolVar(&flags.aggressive, "aggressive", false, "Enable aggressive repairs (may drop content/structure)")
 
 	return cmd
 }
 
 func runRepair(ctx context.Context, filePath string, flags *repairFlags, rootFlags *RootFlags) error {
 	// Validate flags
-	if !flags.inPlace && flags.output == "" {
-		return fmt.Errorf("either --in-place or --output must be specified")
+	if flags.noBackup && flags.backupDir != "" {
+		return fmt.Errorf("--backup-dir is not supported with --no-backup")
 	}
-
-	if flags.inPlace && flags.output != "" {
-		return fmt.Errorf("--in-place and --output are mutually exclusive")
-	}
-
-	if flags.backup && !flags.inPlace {
-		return fmt.Errorf("--backup requires --in-place")
-	}
-
-	if flags.saveMode != "" && !flags.inPlace {
-		return fmt.Errorf("--save-mode requires --in-place")
-	}
-
-	if flags.backupDir != "" && !flags.inPlace {
-		return fmt.Errorf("--backup-dir requires --in-place")
+	if flags.aggressive {
+		fmt.Fprintln(os.Stderr, "Warning: aggressive repairs may discard content or restructure the book.")
 	}
 
 	// Create report options
@@ -97,24 +72,14 @@ func runRepair(ctx context.Context, filePath string, flags *repairFlags, rootFla
 	var repairErr error
 	var outputPath string
 
-	op := operations.NewRepairOperation(ctx)
+	op := operations.NewRepairOperation(ctx).WithAggressive(flags.aggressive)
 
-	if flags.inPlace {
-		mode, err := resolveRepairSaveMode(flags.saveMode, flags.backup)
-		if err != nil {
-			return err
-		}
-		if mode == operations.RepairSaveModeRenameRepaired && flags.backupDir != "" {
-			return fmt.Errorf("--backup-dir is not supported with save-mode rename-repaired")
-		}
-
-		// In-place repair (backup or rename mode)
-		result, outputPath, repairErr = repairInPlace(op, filePath, mode, flags.backupDir)
-	} else {
-		// Repair to new file
-		result, repairErr = repairToOutput(op, filePath, flags.output)
-		outputPath = flags.output
+	mode := operations.RepairSaveModeBackupOriginal
+	if flags.noBackup {
+		mode = operations.RepairSaveModeNoBackup
 	}
+
+	result, outputPath, repairErr = repairInPlace(op, filePath, mode, flags.backupDir)
 
 	// Handle repair errors
 	if repairErr != nil {
@@ -123,7 +88,7 @@ func runRepair(ctx context.Context, filePath string, flags *repairFlags, rootFla
 
 	// Validate the repaired file unless skipped
 	var validationReport *ebmlib.ValidationReport
-	if !flags.skipValidate {
+	if !flags.skipValidate && result.Success && outputPath != "" {
 		validateOp := operations.NewValidateOperation(ctx)
 		validationReport, _ = validateOp.Execute(outputPath)
 	}
@@ -143,57 +108,4 @@ func runRepair(ctx context.Context, filePath string, flags *repairFlags, rootFla
 
 func repairInPlace(op *operations.RepairOperation, filePath string, mode operations.RepairSaveMode, backupDir string) (*ebmlib.RepairResult, string, error) {
 	return op.ExecuteWithSaveMode(filePath, mode, backupDir)
-}
-
-func repairToOutput(op *operations.RepairOperation, filePath, outputPath string) (*ebmlib.RepairResult, error) {
-	// Ensure output directory exists
-	outputDir := filepath.Dir(outputPath)
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create output directory: %w", err)
-	}
-
-	// Copy input to output location
-	if err := copyFile(filePath, outputPath); err != nil {
-		return nil, fmt.Errorf("failed to copy file to output location: %w", err)
-	}
-
-	// Perform repair on the output file
-	result, err := op.Execute(outputPath)
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-func copyFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(dst, data, 0644)
-}
-
-func resolveRepairSaveMode(mode string, backup bool) (operations.RepairSaveMode, error) {
-	if mode == "" {
-		return operations.RepairSaveModeBackupOriginal, nil
-	}
-
-	switch operations.RepairSaveMode(mode) {
-	case operations.RepairSaveModeBackupOriginal:
-		return operations.RepairSaveModeBackupOriginal, nil
-	case operations.RepairSaveModeRenameRepaired:
-		if backup {
-			return "", fmt.Errorf("--backup is not compatible with save-mode rename-repaired")
-		}
-		return operations.RepairSaveModeRenameRepaired, nil
-	case operations.RepairSaveModeNoBackup:
-		if backup {
-			return "", fmt.Errorf("--backup is not compatible with save-mode no-backup")
-		}
-		return operations.RepairSaveModeNoBackup, nil
-	default:
-		return "", fmt.Errorf("invalid save mode: %s (expected backup-original, rename-repaired, or no-backup)", mode)
-	}
 }

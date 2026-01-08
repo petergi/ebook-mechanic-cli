@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewSettingsModel(t *testing.T) {
-	m := NewSettingsModel(4, false, 80, 24)
+	m := NewSettingsModel(4, false, false, false, 80, 24)
 	if m.jobs != 4 {
 		t.Errorf("expected jobs 4, got %d", m.jobs)
 	}
@@ -17,7 +17,7 @@ func TestNewSettingsModel(t *testing.T) {
 }
 
 func TestSettingsModel_Update_ChangeJobs(t *testing.T) {
-	m := NewSettingsModel(4, false, 80, 24)
+	m := NewSettingsModel(4, false, false, false, 80, 24)
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'+'}})
 	m = updated.(SettingsModel)
 	if m.jobs != 5 {
@@ -26,7 +26,7 @@ func TestSettingsModel_Update_ChangeJobs(t *testing.T) {
 }
 
 func TestSettingsModel_Update_ToggleSkipValidation(t *testing.T) {
-	m := NewSettingsModel(4, false, 80, 24)
+	m := NewSettingsModel(4, false, false, false, 80, 24)
 	m.selected = 1
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 	m = updated.(SettingsModel)
@@ -36,8 +36,8 @@ func TestSettingsModel_Update_ToggleSkipValidation(t *testing.T) {
 }
 
 func TestSettingsModel_Update_Save(t *testing.T) {
-	m := NewSettingsModel(4, false, 80, 24)
-	m.selected = 2
+	m := NewSettingsModel(4, false, false, false, 80, 24)
+	m.selected = 4
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("expected save command")
@@ -52,5 +52,11 @@ func TestSettingsModel_Update_Save(t *testing.T) {
 	}
 	if saveMsg.SkipValidation {
 		t.Error("expected skipValidation false")
+	}
+	if saveMsg.NoBackup {
+		t.Error("expected noBackup false")
+	}
+	if saveMsg.Aggressive {
+		t.Error("expected aggressive false")
 	}
 }

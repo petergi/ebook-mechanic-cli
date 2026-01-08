@@ -9,6 +9,18 @@ bindings.
 ebm-cli
 ```
 
+## Install
+
+```sh
+make install-cli
+```
+
+To uninstall:
+
+```sh
+make uninstall-cli
+```
+
 ## Common Flow
 
 1. Launch the CLI.
@@ -23,19 +35,20 @@ ebm-cli
 - `esc`: back
 - `ctrl+c`: quit
 
-## Repair Save Modes
+## Repair Options
 
-In-place repairs can control where the repaired file lands.
+Repairs run in-place. Backups are created by default.
 
-- `--save-mode backup-original`: creates `*_original` backups and repairs the original filename (default for in-place repairs).
-- `--save-mode rename-repaired`: writes `*_repaired` and keeps the original untouched.
-- `--save-mode no-backup`: repairs in place without creating backups.
+- `--no-backup`: repair in place without creating backups.
+- `--backup-dir`: directory for `_original` backups.
 - `--skip-validate`: skips the post-repair validation pass for faster repairs.
+- `--aggressive`: enable aggressive repairs that may drop content or reorder sections.
 
 ## Batch Flags
 
 - `--jobs N`: number of concurrent workers for batch operations.
-- `--save-mode ...`: applies to `batch repair` in-place mode.
+- `--no-backup`: repair in place without creating backups.
+- `--aggressive`: enable aggressive repairs for batch runs.
 
 ## Notes
 

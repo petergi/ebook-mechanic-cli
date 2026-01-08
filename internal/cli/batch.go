@@ -22,11 +22,10 @@ type batchFlags struct {
 	ignore          []string
 	progress        string
 	summaryOnly     bool
-	inPlace         bool
-	backup          bool
 	backupDir       string
-	saveMode        string
 	continueOnError bool
+	noBackup        bool
+	aggressive      bool
 }
 
 func newBatchCmd(rootFlags *RootFlags) *cobra.Command {
@@ -43,8 +42,8 @@ The number of workers can be configured with the --jobs flag.`,
   # Batch validate with custom worker count
   ebm batch validate ./library --jobs 8
 
-  # Batch repair in-place with backups
-  ebm batch repair ./books --in-place --backup
+  # Batch repair in-place with backups (default)
+  ebm batch repair ./books
 
   # Batch operations with JSON output
   ebm batch validate ./library --format json --output results.json`,
@@ -103,17 +102,17 @@ func newBatchRepairCmd(rootFlags *RootFlags) *cobra.Command {
 
 Files are processed using a worker pool for efficient parallel repairs.
 Progress is displayed in real-time showing completed/total files.`,
-		Example: `  # Repair all files in-place with backups
-  ebm batch repair ./books --in-place --backup
+		Example: `  # Repair all files in-place with backups (default)
+  ebm batch repair ./books
 
   # Repair with custom backup directory
-  ebm batch repair ./library --in-place --backup --backup-dir ./backups
+  ebm batch repair ./library --backup-dir ./backups
 
-  # Repair by renaming repaired files
-  ebm batch repair ./books --in-place --save-mode rename-repaired
+  # Repair without backups
+  ebm batch repair ./books --no-backup
 
   # Repair with 4 workers
-  ebm batch repair ./books --in-place --jobs 4`,
+  ebm batch repair ./books --jobs 4`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runBatchRepair(cmd.Context(), args[0], flags, rootFlags)
@@ -128,10 +127,9 @@ Progress is displayed in real-time showing completed/total files.`,
 	cmd.Flags().StringSliceVar(&flags.ignore, "ignore", nil, "Glob patterns to ignore")
 	cmd.Flags().StringVar(&flags.progress, "progress", "auto", "Progress output mode (auto, simple, none)")
 	cmd.Flags().BoolVar(&flags.summaryOnly, "summary-only", false, "Only print summary output")
-	cmd.Flags().BoolVar(&flags.inPlace, "in-place", false, "Repair files in place")
-	cmd.Flags().BoolVar(&flags.backup, "backup", false, "Create backups before in-place repair (legacy alias for --save-mode backup-original)")
 	cmd.Flags().StringVar(&flags.backupDir, "backup-dir", "", "Directory for backup files")
-	cmd.Flags().StringVar(&flags.saveMode, "save-mode", "", "Save mode for in-place repairs: backup-original, rename-repaired, or no-backup")
+	cmd.Flags().BoolVar(&flags.noBackup, "no-backup", false, "Skip backup before in-place repair")
+	cmd.Flags().BoolVar(&flags.aggressive, "aggressive", false, "Enable aggressive repairs (may drop content/structure)")
 	cmd.Flags().BoolVar(&flags.continueOnError, "continue-on-error", true, "Continue processing on individual file errors")
 
 	return cmd
@@ -252,17 +250,16 @@ func runBatchRepair(ctx context.Context, dir string, flags *batchFlags, rootFlag
 		flags.jobs = runtime.NumCPU()
 	}
 
-	// Validate flags
-	if !flags.inPlace {
-		return fmt.Errorf("batch repair currently only supports --in-place mode")
+	if flags.noBackup && flags.backupDir != "" {
+		return fmt.Errorf("--backup-dir is not supported with --no-backup")
+	}
+	if flags.aggressive {
+		fmt.Fprintln(os.Stderr, "Warning: aggressive repairs may discard content or restructure the book.")
 	}
 
-	mode, err := resolveRepairSaveMode(flags.saveMode, flags.backup)
-	if err != nil {
-		return err
-	}
-	if (mode == operations.RepairSaveModeRenameRepaired || mode == operations.RepairSaveModeNoBackup) && flags.backupDir != "" {
-		return fmt.Errorf("--backup-dir is not supported with save-mode rename-repaired or no-backup")
+	mode := operations.RepairSaveModeBackupOriginal
+	if flags.noBackup {
+		mode = operations.RepairSaveModeNoBackup
 	}
 
 	// Find all matching files
@@ -296,6 +293,7 @@ func runBatchRepair(ctx context.Context, dir string, flags *batchFlags, rootFlag
 		Timeout:      time.Duration(flags.timeout) * time.Second,
 		RepairMode:   mode,
 		BackupDir:    flags.backupDir,
+		Aggressive:   flags.aggressive,
 	}
 	processor := operations.NewBatchProcessor(ctx, config)
 

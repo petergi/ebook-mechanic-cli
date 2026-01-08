@@ -44,13 +44,13 @@ Validate and repair EPUB and PDF files with comprehensive reporting.
   ebm validate book.epub
   ebm validate book.epub --format json --output report.json
 
-  # CLI repair
-  ebm repair book.epub --in-place --backup
-  ebm repair book.epub --output fixed.epub
+  # CLI repair (in-place with backup by default)
+  ebm repair book.epub
+  ebm repair book.epub --no-backup
 
   # Batch operations
   ebm batch validate ./books --jobs 8
-  ebm batch repair ./library --in-place --backup`,
+  ebm batch repair ./library`,
 	}
 
 	// Global flags available to all commands

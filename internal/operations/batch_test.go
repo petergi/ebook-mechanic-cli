@@ -182,14 +182,15 @@ func TestAggregateResults_Detailed(t *testing.T) {
 		{FilePath: "valid.epub", Report: &ebmlib.ValidationReport{IsValid: true}},
 		{FilePath: "invalid.epub", Report: &ebmlib.ValidationReport{IsValid: false}},
 		{FilePath: "system_err.epub", Error: errors.New("io error")},
-		{FilePath: "repair_ok.epub", Repair: &ebmlib.RepairResult{Success: true}},
-		{FilePath: "repair_fail.epub", Repair: &ebmlib.RepairResult{Success: false}},
+		{FilePath: "repair_ok.epub", Repair: &ebmlib.RepairResult{Success: true, ActionsApplied: []ebmlib.RepairAction{{}}}},
+		{FilePath: "repair_noop.epub", Repair: &ebmlib.RepairResult{Success: true}},
+		{FilePath: "repair_fail.epub", Repair: &ebmlib.RepairResult{Success: false, ActionsApplied: []ebmlib.RepairAction{{}}}},
 	}
 
 	br := AggregateResults(results, time.Second, OperationRepair)
 
-	if len(br.Valid) != 2 { // valid.epub, repair_ok.epub
-		t.Errorf("Expected 2 valid, got %d", len(br.Valid))
+	if len(br.Valid) != 3 { // valid.epub, repair_ok.epub, repair_noop.epub
+		t.Errorf("Expected 3 valid, got %d", len(br.Valid))
 	}
 	if len(br.Invalid) != 2 { // invalid.epub, repair_fail.epub
 		t.Errorf("Expected 2 invalid, got %d", len(br.Invalid))
@@ -202,6 +203,9 @@ func TestAggregateResults_Detailed(t *testing.T) {
 	}
 	if br.RepairsSucceeded != 1 { // repair_ok
 		t.Errorf("Expected 1 repair succeeded, got %d", br.RepairsSucceeded)
+	}
+	if br.RepairsNoOp != 1 { // repair_noop
+		t.Errorf("Expected 1 no-op repair, got %d", br.RepairsNoOp)
 	}
 }
 

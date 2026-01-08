@@ -15,6 +15,8 @@ RUN_ARGS?=
 # Directories
 CMD_DIR=./cmd/ebm
 BUILD_DIR=./build
+INSTALL_DIR?=/usr/local/bin
+FIXTURES_REPAIR?=./test-library/repair-fixtures
 
 # ANSI color codes
 RED=\033[0;31m
@@ -117,6 +119,18 @@ install: ## Install dependencies
 	$(GO) mod tidy
 	@echo "$(BOLD)$(GREEN)✓ Dependencies installed$(RESET)"
 
+.PHONY: install-cli
+install-cli: build ## Install the CLI binary to INSTALL_DIR (default: /usr/local/bin)
+	@echo "$(BOLD)$(GREEN)Installing $(BINARY_NAME) to $(INSTALL_DIR)...$(RESET)"
+	@install -m 0755 $(BUILD_DIR)/$(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME)
+	@echo "$(BOLD)$(GREEN)✓ Installed: $(INSTALL_DIR)/$(BINARY_NAME)$(RESET)"
+
+.PHONY: uninstall-cli
+uninstall-cli: ## Remove the CLI binary from INSTALL_DIR
+	@echo "$(BOLD)$(RED)Removing $(BINARY_NAME) from $(INSTALL_DIR)...$(RESET)"
+	@rm -f $(INSTALL_DIR)/$(BINARY_NAME)
+	@echo "$(BOLD)$(GREEN)✓ Removed: $(INSTALL_DIR)/$(BINARY_NAME)$(RESET)"
+
 .PHONY: run
 run: ## Run the interactive TUI
 	@echo "$(BOLD)$(RED)Running application (TUI)...$(RESET)"
@@ -132,10 +146,10 @@ run-cli: ## Run the CLI validation (usage: make run-cli RUN_ARGS="path/to/file")
 	$(GO) run $(CMD_DIR) $(RUN_ARGS)
 
 .PHONY: run-repair
-run-repair: ## Run single-file repair (usage: make run-repair RUN_ARGS="book.epub --in-place")
+run-repair: ## Run single-file repair (usage: make run-repair RUN_ARGS="book.epub --no-backup --aggressive")
 	@echo "$(BOLD)$(RED)Running repair...$(RESET)"
 	@if [ -z "$(RUN_ARGS)" ]; then \
-		echo "$(BOLD)$(YELLOW)Usage: make run-repair RUN_ARGS=\"book.epub --in-place\"$(RESET)"; \
+		echo "$(BOLD)$(YELLOW)Usage: make run-repair RUN_ARGS=\"book.epub --no-backup --aggressive\"$(RESET)"; \
 		exit 1; \
 	fi
 	$(GO) run $(CMD_DIR) repair $(RUN_ARGS)
@@ -150,13 +164,19 @@ run-batch-validate: ## Run batch validation (usage: make run-batch-validate RUN_
 	$(GO) run $(CMD_DIR) batch validate $(RUN_ARGS)
 
 .PHONY: run-batch-repair
-run-batch-repair: ## Run batch repair (usage: make run-batch-repair RUN_ARGS="./books --in-place --jobs 8")
+run-batch-repair: ## Run batch repair (usage: make run-batch-repair RUN_ARGS="./books --no-backup --aggressive --jobs 8")
 	@echo "$(BOLD)$(RED)Running batch repair...$(RESET)"
 	@if [ -z "$(RUN_ARGS)" ]; then \
-		echo "$(BOLD)$(YELLOW)Usage: make run-batch-repair RUN_ARGS=\"./books --in-place --jobs 8\"$(RESET)"; \
+		echo "$(BOLD)$(YELLOW)Usage: make run-batch-repair RUN_ARGS=\"./books --no-backup --aggressive --jobs 8\"$(RESET)"; \
 		exit 1; \
 	fi
 	$(GO) run $(CMD_DIR) batch repair $(RUN_ARGS)
+
+.PHONY: fixtures-repair
+fixtures-repair: ## Generate repair fixtures (usage: make fixtures-repair [FIXTURES_REPAIR=...])
+	@echo "$(BOLD)$(CYAN)Generating repair fixtures...$(RESET)"
+	@chmod +x scripts/generate-repair-fixtures.sh
+	@OUT_DIR="$(FIXTURES_REPAIR)" ./scripts/generate-repair-fixtures.sh
 
 .PHONY: check
 check: build test lint vet ## Run build, tests, lint, and vet

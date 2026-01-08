@@ -47,7 +47,6 @@ func TestRunBatchRepair_WithFile(t *testing.T) {
 		jobs:      1,
 		progress:  "none",
 		maxDepth:  -1,
-		inPlace:   true,
 	}
 	rootFlags := &RootFlags{Color: false, Format: "text"}
 
@@ -91,8 +90,6 @@ func TestRunBatchRepair_WithBackup(t *testing.T) {
 		jobs:      1,
 		progress:  "none",
 		maxDepth:  -1,
-		inPlace:   true,
-		backup:    true,
 		backupDir: filepath.Join(tmpDir, "backups"),
 	}
 	rootFlags := &RootFlags{Color: false, Format: "text"}
@@ -113,7 +110,6 @@ func TestRunBatchRepair_DefaultJobs(t *testing.T) {
 	ctx := context.Background()
 	flags := &batchFlags{
 		jobs:     0,
-		inPlace:  true,
 		maxDepth: -1,
 	}
 	rootFlags := &RootFlags{Color: false}
@@ -173,8 +169,6 @@ func TestRunBatchRepair_InvalidOpts(t *testing.T) {
 
 	// Test invalid backup dir
 	flags := &batchFlags{
-		inPlace:   true,
-		backup:    true,
 		backupDir: "/invalid/path/that/cannot/exist",
 	}
 	rootFlags := &RootFlags{}
@@ -206,16 +200,6 @@ func TestRunBatchValidate_InvalidReport(t *testing.T) {
 	}
 }
 
-func TestRunBatchRepair_NoInPlaceError(t *testing.T) {
-	ctx := context.Background()
-	flags := &batchFlags{inPlace: false}
-	rootFlags := &RootFlags{}
-	err := runBatchRepair(ctx, ".", flags, rootFlags)
-	if err == nil {
-		t.Error("Expected error when inPlace is false for batch repair")
-	}
-}
-
 func TestBatchRepair_NoFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -223,28 +207,12 @@ func TestBatchRepair_NoFiles(t *testing.T) {
 	flags := &batchFlags{
 		recursive: true,
 		jobs:      1,
-		inPlace:   true,
 	}
 	rootFlags := &RootFlags{Color: false}
 
 	err := runBatchRepair(ctx, tmpDir, flags, rootFlags)
 	if err == nil {
 		t.Error("expected error when no files found in directory")
-	}
-}
-
-func TestBatchRepair_NotInPlace(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	ctx := context.Background()
-	flags := &batchFlags{
-		inPlace: false, // Not supported for batch repair yet
-	}
-	rootFlags := &RootFlags{}
-
-	err := runBatchRepair(ctx, tmpDir, flags, rootFlags)
-	if err == nil {
-		t.Error("expected error when inPlace is false")
 	}
 }
 
@@ -255,8 +223,6 @@ func TestRunBatchRepair_InvalidBackupDir(t *testing.T) {
 	}
 	ctx := context.Background()
 	flags := &batchFlags{
-		inPlace:   true,
-		backup:    true,
 		backupDir: "/proc/invalid/path",
 		maxDepth:  -1,
 	}
@@ -269,7 +235,7 @@ func TestRunBatchRepair_InvalidBackupDir(t *testing.T) {
 
 func TestRunBatchRepair_InvalidDir(t *testing.T) {
 	ctx := context.Background()
-	flags := &batchFlags{inPlace: true, jobs: 1}
+	flags := &batchFlags{jobs: 1}
 	rootFlags := &RootFlags{}
 	err := runBatchRepair(ctx, "/non/existent/dir/12345", flags, rootFlags)
 	if err == nil {
