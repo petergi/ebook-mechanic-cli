@@ -386,10 +386,10 @@ func AggregateResults(results []Result, duration time.Duration, operation Operat
 		} else if r.Repair != nil {
 			// This is a repair result
 			applied := len(r.Repair.ActionsApplied) > 0
-			if applied {
-				br.RepairsAttempted++
-			}
 			if r.Repair.Success {
+				if applied {
+					br.RepairsAttempted++
+				}
 				br.Valid = append(br.Valid, r)
 				br.Successful = append(br.Successful, r)
 				if applied {
@@ -398,6 +398,7 @@ func AggregateResults(results []Result, duration time.Duration, operation Operat
 					br.RepairsNoOp++
 				}
 			} else {
+				br.RepairsAttempted++
 				br.Invalid = append(br.Invalid, r)
 				br.Failed = append(br.Failed, r)
 			}
