@@ -24,27 +24,32 @@ const (
 	StateSettings
 	StateProgress
 	StateReport
+	StateCalibre
 )
 
 // App is the main TUI application coordinator
 type App struct {
-	state          AppState
-	menuModel      models.MenuModel
-	browserModel   models.BrowserModel
-	settingsModel  models.SettingsModel
-	progressModel  models.ProgressModel
-	reportModel    models.ReportModel
-	ctx            context.Context
-	cancel         context.CancelFunc
-	selectedFile   string
-	activeAction   string
-	batchJobs      int
-	skipValidation bool
-	noBackup       bool
-	aggressive     bool
-	width          int
-	height         int
-	progressCh     <-chan operations.ProgressUpdate
+	state              AppState
+	menuModel          models.MenuModel
+	browserModel       models.BrowserModel
+	settingsModel      models.SettingsModel
+	progressModel      models.ProgressModel
+	reportModel        models.ReportModel
+	calibreModel       models.CalibreModel
+	ctx                context.Context
+	cancel             context.CancelFunc
+	selectedFile       string
+	activeAction       string
+	batchJobs          int
+	skipValidation     bool
+	noBackup           bool
+	aggressive         bool
+	removeSystemErrors bool // Remove books with system errors
+	moveFailedRepairs  bool // Move unrepairable books to INVALID folder
+	cleanupEmptyDirs   bool // Clean up empty parent directories after removal/move
+	width              int
+	height             int
+	progressCh         <-chan operations.ProgressUpdate
 }
 
 // NewApp creates a new TUI application
@@ -52,14 +57,17 @@ func NewApp() App {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return App{
-		state:          StateMenu,
-		menuModel:      models.NewMenuModel(),
-		ctx:            ctx,
-		cancel:         cancel,
-		batchJobs:      operations.DefaultBatchConfig().NumWorkers,
-		skipValidation: false,
-		noBackup:       false,
-		aggressive:     false,
+		state:              StateMenu,
+		menuModel:          models.NewMenuModel(),
+		ctx:                ctx,
+		cancel:             cancel,
+		batchJobs:          operations.DefaultBatchConfig().NumWorkers,
+		skipValidation:     false,
+		noBackup:           false,
+		aggressive:         false,
+		removeSystemErrors: false,
+		moveFailedRepairs:  false,
+		cleanupEmptyDirs:   true,
 	}
 }
 
@@ -87,6 +95,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.updateProgress(msg)
 	case StateReport:
 		return a.updateReport(msg)
+	case StateCalibre:
+		return a.updateCalibre(msg)
 	}
 
 	return a, nil
@@ -105,6 +115,8 @@ func (a App) View() string {
 		return a.progressModel.View()
 	case StateReport:
 		return a.reportModel.View()
+	case StateCalibre:
+		return a.calibreModel.View()
 	}
 
 	return "Unknown state"
@@ -146,8 +158,15 @@ func (a App) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.state = StateBrowser
 			return a, a.browserModel.Init()
 
+		case "calibre-cleanup":
+			// Show directory browser for Calibre library
+			cwd, _ := os.Getwd()
+			a.browserModel = models.NewBatchBrowserModel(cwd, a.width, a.height)
+			a.state = StateBrowser
+			return a, a.browserModel.Init()
+
 		case "settings":
-			a.settingsModel = models.NewSettingsModel(a.batchJobs, a.skipValidation, a.noBackup, a.aggressive, a.width, a.height)
+			a.settingsModel = models.NewSettingsModel(a.batchJobs, a.skipValidation, a.noBackup, a.aggressive, a.removeSystemErrors, a.moveFailedRepairs, a.cleanupEmptyDirs, a.width, a.height)
 			a.state = StateSettings
 			return a, a.settingsModel.Init()
 
@@ -179,6 +198,9 @@ func (a App) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.skipValidation = msg.SkipValidation
 		a.noBackup = msg.NoBackup
 		a.aggressive = msg.Aggressive
+		a.removeSystemErrors = msg.RemoveSystemErrors
+		a.moveFailedRepairs = msg.MoveFailedRepairs
+		a.cleanupEmptyDirs = msg.CleanupEmptyDirs
 		a.state = StateMenu
 		return a, nil
 
@@ -231,6 +253,8 @@ func (a App) updateBrowser(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a.startBatchDirectory(msg.Path, operations.OperationValidate)
 		case "batch-repair":
 			return a.startBatchDirectory(msg.Path, operations.OperationRepair)
+		case "calibre-cleanup":
+			return a.startCalibreCleanup(msg.Path)
 		}
 
 	case models.BackToMenuMsg:
@@ -313,58 +337,118 @@ func (a App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a App) startBatchDirectory(path string, opType operations.OperationType) (tea.Model, tea.Cmd) {
-	files, err := collectBatchFiles(path)
-	if err != nil {
-		title := "Batch Validation"
-		if opType == operations.OperationRepair {
-			title = "Batch Repair"
-		}
-		a.progressModel = models.NewProgressModel(title, path, 0, a.width, a.height)
-		a.state = StateProgress
-		return a, tea.Batch(
-			a.progressModel.Init(),
-			func() tea.Msg {
-				return models.OperationDoneMsg{
-					Result: operations.BatchResult{
-						Failed: []operations.Result{
-							{FilePath: path, Error: fmt.Errorf("batch scan failed: %w", err)},
-						},
-						Total: 1,
-					},
-				}
-			},
-		)
-	}
-
 	title := "Batch Validation"
 	if opType == operations.OperationRepair {
 		title = "Batch Repair"
 	}
-	a.progressModel = models.NewProgressModel(title, path, len(files), a.width, a.height)
+
+	// Show progress immediately so directory scanning doesn’t feel frozen
+	a.progressModel = models.NewProgressModel(title, path, 0, a.width, a.height)
 	a.state = StateProgress
 
-	// Start batch processing in a goroutine to not block the UI
-	// and send the result when done.
-	config := operations.DefaultBatchConfig()
-	if a.noBackup {
-		config.RepairMode = operations.RepairSaveModeNoBackup
-	} else {
-		config.RepairMode = operations.RepairSaveModeBackupOriginal
-	}
-	config.Aggressive = a.aggressive
-	if a.batchJobs > 0 {
-		config.NumWorkers = a.batchJobs
-	}
-	batch := operations.NewBatchProcessor(a.ctx, config)
+	progressCh := make(chan operations.ProgressUpdate)
+	a.progressCh = progressCh
 	doneCh := make(chan operations.BatchResult)
-	start := time.Now()
 
 	go func() {
-		results := batch.Execute(files, opType)
-		doneCh <- operations.AggregateResults(results, time.Since(start), opType)
-	}()
+		// Emit initial scanning status
+		progressCh <- operations.ProgressUpdate{Completed: 0, Total: 0, Current: "Scanning library..."}
 
-	a.progressCh = batch.ProgressChannel()
+		files, err := collectBatchFiles(path, func(count int, sample string) {
+			if count%200 == 0 {
+				progressCh <- operations.ProgressUpdate{Completed: count, Total: 0, Current: fmt.Sprintf("Scanning library... (%d)", count)}
+			}
+		})
+		if err != nil {
+			doneCh <- operations.BatchResult{
+				Failed: []operations.Result{{FilePath: path, Error: fmt.Errorf("batch scan failed: %w", err)}},
+				Total:  1,
+			}
+			close(progressCh)
+			return
+		}
+
+		// Announce total so the progress bar activates when batch starts
+		progressCh <- operations.ProgressUpdate{Completed: 0, Total: len(files), Current: fmt.Sprintf("Found %d files", len(files))}
+
+		config := operations.DefaultBatchConfig()
+		if a.noBackup {
+			config.RepairMode = operations.RepairSaveModeNoBackup
+		} else {
+			config.RepairMode = operations.RepairSaveModeBackupOriginal
+		}
+		config.Aggressive = a.aggressive
+		if a.batchJobs > 0 {
+			config.NumWorkers = a.batchJobs
+		}
+
+		batch := operations.NewBatchProcessor(a.ctx, config)
+		batchPath := path
+		batchStart := time.Now()
+
+		// Forward batch progress into our unified channel so the UI keeps streaming
+		go func() {
+			for update := range batch.ProgressChannel() {
+				progressCh <- update
+			}
+		}()
+
+		results := batch.Execute(files, opType)
+		aggregated := operations.AggregateResults(results, time.Since(batchStart), opType)
+
+		// Record the options used for this batch
+		aggregated.Options = operations.BatchOptions{
+			NumWorkers:         config.NumWorkers,
+			SkipValidation:     a.skipValidation,
+			NoBackup:           a.noBackup,
+			Aggressive:         a.aggressive,
+			RemoveSystemErrors: a.removeSystemErrors,
+			MoveFailedRepairs:  a.moveFailedRepairs,
+			CleanupEmptyDirs:   a.cleanupEmptyDirs,
+		}
+
+		// Capture intended cleanup lists (non-blocking), then perform cleanup async
+		if a.removeSystemErrors && len(aggregated.Errored) > 0 {
+			aggregated.RemovedFiles = make([]string, 0, len(aggregated.Errored))
+			for _, r := range aggregated.Errored {
+				aggregated.RemovedFiles = append(aggregated.RemovedFiles, r.FilePath)
+			}
+		}
+		if a.moveFailedRepairs && opType == operations.OperationRepair && len(aggregated.Invalid) > 0 {
+			aggregated.MovedFiles = make([]string, 0, len(aggregated.Invalid))
+			for _, r := range aggregated.Invalid {
+				aggregated.MovedFiles = append(aggregated.MovedFiles, r.FilePath)
+			}
+		}
+
+		doneCh <- aggregated
+		close(progressCh)
+
+		// Run filesystem cleanup asynchronously so the UI/progress is not blocked
+		go func(erred []operations.Result, invalid []operations.Result) {
+			// Remove errored files
+			if a.removeSystemErrors {
+				for _, r := range erred {
+					_ = os.Remove(r.FilePath)
+					if a.cleanupEmptyDirs {
+						removeEmptyParentDirs(filepath.Dir(r.FilePath), batchPath)
+					}
+				}
+			}
+			// Move invalid repairs
+			if a.moveFailedRepairs && opType == operations.OperationRepair {
+				invalidDir := filepath.Join(batchPath, "INVALID")
+				_ = os.MkdirAll(invalidDir, 0755)
+				for _, r := range invalid {
+					dstPath := filepath.Join(invalidDir, filepath.Base(r.FilePath))
+					_ = os.Rename(r.FilePath, dstPath)
+					if a.cleanupEmptyDirs {
+						removeEmptyParentDirs(filepath.Dir(r.FilePath), batchPath)
+					}
+				}
+			}
+		}(aggregated.Errored, aggregated.Invalid)
+	}()
 
 	return a, tea.Batch(
 		a.progressModel.Init(),
@@ -374,7 +458,7 @@ func (a App) startBatchDirectory(path string, opType operations.OperationType) (
 			return models.OperationDoneMsg{Result: result}
 		},
 		// Command to stream progress
-		batchProgressCmd(a.progressCh),
+		batchProgressCmd(progressCh),
 	)
 }
 
@@ -414,10 +498,63 @@ func (a App) startBatchWithFiles(files []string, action string) (tea.Model, tea.
 	batch := operations.NewBatchProcessor(a.ctx, config)
 	doneCh := make(chan operations.BatchResult)
 	start := time.Now()
+	batchPath := filepath.Dir(files[0]) // Get common parent directory
 
 	go func() {
 		results := batch.Execute(files, opType)
-		doneCh <- operations.AggregateResults(results, time.Since(start), opType)
+		aggregated := operations.AggregateResults(results, time.Since(start), opType)
+
+		// Record the options used for this batch
+		aggregated.Options = operations.BatchOptions{
+			NumWorkers:         config.NumWorkers,
+			SkipValidation:     a.skipValidation,
+			NoBackup:           a.noBackup,
+			Aggressive:         a.aggressive,
+			RemoveSystemErrors: a.removeSystemErrors,
+			MoveFailedRepairs:  a.moveFailedRepairs,
+			CleanupEmptyDirs:   a.cleanupEmptyDirs,
+		}
+
+		// Capture intended cleanup lists (non-blocking), then perform cleanup async
+		if a.removeSystemErrors && len(aggregated.Errored) > 0 {
+			aggregated.RemovedFiles = make([]string, 0, len(aggregated.Errored))
+			for _, r := range aggregated.Errored {
+				aggregated.RemovedFiles = append(aggregated.RemovedFiles, r.FilePath)
+			}
+		}
+		if a.moveFailedRepairs && opType == operations.OperationRepair && len(aggregated.Invalid) > 0 {
+			aggregated.MovedFiles = make([]string, 0, len(aggregated.Invalid))
+			for _, r := range aggregated.Invalid {
+				aggregated.MovedFiles = append(aggregated.MovedFiles, r.FilePath)
+			}
+		}
+
+		doneCh <- aggregated
+
+		// Run filesystem cleanup asynchronously so the UI/progress is not blocked
+		go func(erred []operations.Result, invalid []operations.Result) {
+			// Remove errored files
+			if a.removeSystemErrors {
+				for _, r := range erred {
+					_ = os.Remove(r.FilePath)
+					if a.cleanupEmptyDirs {
+						removeEmptyParentDirs(filepath.Dir(r.FilePath), batchPath)
+					}
+				}
+			}
+			// Move invalid repairs
+			if a.moveFailedRepairs && opType == operations.OperationRepair {
+				invalidDir := filepath.Join(batchPath, "INVALID")
+				_ = os.MkdirAll(invalidDir, 0755)
+				for _, r := range invalid {
+					dstPath := filepath.Join(invalidDir, filepath.Base(r.FilePath))
+					_ = os.Rename(r.FilePath, dstPath)
+					if a.cleanupEmptyDirs {
+						removeEmptyParentDirs(filepath.Dir(r.FilePath), batchPath)
+					}
+				}
+			}
+		}(aggregated.Errored, aggregated.Invalid)
 	}()
 
 	a.progressCh = batch.ProgressChannel()
@@ -434,7 +571,7 @@ func (a App) startBatchWithFiles(files []string, action string) (tea.Model, tea.
 	)
 }
 
-func collectBatchFiles(path string) ([]string, error) {
+func collectBatchFiles(path string, onFound func(count int, sample string)) ([]string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, err
@@ -468,6 +605,9 @@ func collectBatchFiles(path string) ([]string, error) {
 
 		if isEbookFile(entryPath) {
 			files = append(files, entryPath)
+			if onFound != nil {
+				onFound(len(files), entryPath)
+			}
 		}
 
 		return nil
@@ -501,6 +641,62 @@ func (a App) updateReport(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return a, cmd
+}
+
+// updateCalibre handles Calibre cleanup state updates
+func (a App) updateCalibre(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case models.BackToMenuMsg:
+		a.state = StateMenu
+		return a, nil
+
+	case models.CalibreScanMsg:
+		// Start the scan in background
+		return a, func() tea.Msg {
+			progressCh := make(chan models.CalibreScanProgressMsg, 100)
+
+			// Start progress forwarding in a goroutine
+			go func() {
+				for progress := range progressCh {
+					// Send progress updates to the tea program
+					// Note: This is a simplified approach; in production you might want
+					// to use tea.Program.Send() for proper message passing
+					_ = progress // Progress is handled within ScanCalibreLibrary
+				}
+			}()
+
+			result := models.ScanCalibreLibrary(msg.LibraryPath, progressCh)
+			close(progressCh)
+			return models.CalibreScanCompleteMsg{Result: result}
+		}
+
+	case models.CalibreCleanupMsg:
+		// Perform cleanup
+		return a, func() tea.Msg {
+			dirs, files, err := models.CleanupCalibreLibrary(a.calibreModel.GetScanResult())
+			return models.CalibreCleanupCompleteMsg{
+				CleanedDirs:  dirs,
+				CleanedFiles: files,
+				Error:        err,
+			}
+		}
+
+	default:
+		var m tea.Model
+		m, cmd = a.calibreModel.Update(msg)
+		a.calibreModel = m.(models.CalibreModel)
+	}
+
+	return a, cmd
+}
+
+// startCalibreCleanup starts the Calibre library cleanup process
+func (a App) startCalibreCleanup(libraryPath string) (tea.Model, tea.Cmd) {
+	a.calibreModel = models.NewCalibreModel(libraryPath, a.width, a.height)
+	a.state = StateCalibre
+	return a, a.calibreModel.Init()
 }
 
 // startValidation starts a validation operation
@@ -603,5 +799,96 @@ func batchProgressCmd(ch <-chan operations.ProgressUpdate) tea.Cmd {
 			return nil
 		}
 		return models.ConvertBatchProgress(update)
+	}
+}
+
+// isCalibreMetadataDirectory checks if a directory contains only Calibre metadata files
+// (no ebooks, only cover.jpg, metadata.opf, .DS_Store, etc.)
+func isCalibreMetadataDirectory(dirPath string) bool {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return false
+	}
+
+	// Empty directory counts as removable
+	if len(entries) == 0 {
+		return true
+	}
+
+	// Check for ebook files - if any exist, not metadata-only
+	hasEbook := false
+	hasMetadata := false
+
+	for _, entry := range entries {
+		name := strings.ToLower(entry.Name())
+
+		// Skip hidden files and common system files
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+
+		if entry.IsDir() {
+			// Nested directory means not a simple Calibre metadata folder
+			return false
+		}
+
+		ext := filepath.Ext(name)
+		if ext == ".epub" || ext == ".pdf" || ext == ".mobi" || ext == ".azw" || ext == ".azw3" {
+			hasEbook = true
+			break
+		}
+
+		// Check for Calibre metadata files
+		if name == "cover.jpg" || name == "cover.jpeg" || name == "cover.png" ||
+			name == "metadata.opf" {
+			hasMetadata = true
+		}
+	}
+
+	// If no ebooks and has metadata files, or just empty/system files, it's metadata-only
+	return !hasEbook && (hasMetadata || len(entries) == 0)
+}
+
+// removeEmptyParentDirs removes empty parent directories and Calibre metadata-only directories up to the batch root
+// Bails out if a parent has more than 3 siblings to avoid scanning large shallow hierarchies
+func removeEmptyParentDirs(dir string, rootPath string) {
+	// Ensure both paths are absolute and clean
+	rootPath = filepath.Clean(rootPath)
+	dir = filepath.Clean(dir)
+
+	// Walk up the directory tree
+	for dir != rootPath && strings.HasPrefix(dir, rootPath) {
+		// Check sibling count before attempting removal
+		parent := filepath.Dir(dir)
+		if parent != rootPath { // Don't bail at root level
+			entries, err := os.ReadDir(parent)
+			if err == nil && len(entries) > 3 {
+				// Too many siblings, skip this entire branch to avoid performance hit
+				break
+			}
+		}
+
+		// First try to remove if it's a Calibre metadata-only directory
+		if isCalibreMetadataDirectory(dir) {
+			// Remove all files in the directory first
+			entries, err := os.ReadDir(dir)
+			if err == nil {
+				for _, entry := range entries {
+					if !entry.IsDir() {
+						_ = os.Remove(filepath.Join(dir, entry.Name()))
+					}
+				}
+			}
+		}
+
+		// Try to remove the directory if empty
+		err := os.Remove(dir)
+		if err != nil {
+			// Directory not empty or other error, stop
+			break
+		}
+
+		// Move to parent
+		dir = parent
 	}
 }

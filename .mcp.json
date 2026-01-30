@@ -1,6 +1,5 @@
 {
   "mcpServers": {
-    // mcp definitions here.
     "Pieces": {
       "command": "pieces",
       "args": ["--ignore-onboarding", "mcp", "start"]
@@ -13,13 +12,21 @@
     "MCP_DOCKER": {
       "command": "docker",
       "args": ["mcp", "gateway", "run"]
-    },
-    "Ref": {
-      "type": "http",
-      "url": "https://api.ref.tools/mcp",
-      "headers": {
-        "x-ref-api-key": "ref-f8753e1ea7c760da2bd8"
-      }
+    }
+  },
+  "m365agentstoolkit": {
+    "command": "npx",
+    "args": ["@microsoft/m365agentstoolkit-mcp@latest", "server", "start"]
+  },
+  "M365AgentsToolkit MCP Server": {
+    "command": "npx",
+    "args": ["@microsoft/m365agentstoolkit-mcp@latest", "server", "start"]
+  },
+  "Ref": {
+    "type": "http",
+    "url": "https://api.ref.tools/mcp",
+    "headers": {
+      "x-ref-api-key": "ref-f8753e1ea7c760da2bd8"
     }
   }
 }

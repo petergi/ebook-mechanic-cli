@@ -608,19 +608,17 @@ func TestBrowserModel_Update_ToggleSelect(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmpDir, "test.epub"), []byte("t"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	
+
 	m := NewMultiSelectBrowserModel(tmpDir, 80, 24)
-		
 
-		// Find the file item
+	// Find the file item
 
-		var fileIdx = -1
+	var fileIdx = -1
 
-		for i, item := range m.items {
+	for i, item := range m.items {
 
-			if !item.IsDir {
+		if !item.IsDir {
 
-	
 			fileIdx = i
 			break
 		}
@@ -657,10 +655,7 @@ func TestBrowserModel_Update_Scrolling(t *testing.T) {
 
 	}
 
-	
-
 	m := NewBrowserModel(tmpDir, 80, 24)
-
 
 	m.viewportSize = 5
 

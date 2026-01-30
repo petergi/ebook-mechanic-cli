@@ -172,6 +172,15 @@ run-batch-repair: ## Run batch repair (usage: make run-batch-repair RUN_ARGS="./
 	fi
 	$(GO) run $(CMD_DIR) batch repair $(RUN_ARGS)
 
+.PHONY: run-batch-repair-clean
+run-batch-repair-clean: ## Run batch repair with cleanup options (removes system errors, moves failed repairs, cleans empty dirs)
+	@echo "$(BOLD)$(RED)Running batch repair with cleanup...$(RESET)"
+	@if [ -z "$(RUN_ARGS)" ]; then \
+		echo "$(BOLD)$(YELLOW)Usage: make run-batch-repair-clean RUN_ARGS=\"./books --remove-system-errors --move-failed-repairs --cleanup-empty-dirs\"$(RESET)"; \
+		exit 1; \
+	fi
+	$(GO) run $(CMD_DIR) batch repair --remove-system-errors --move-failed-repairs --cleanup-empty-dirs $(RUN_ARGS)
+
 .PHONY: fixtures-repair
 fixtures-repair: ## Generate repair fixtures (usage: make fixtures-repair [FIXTURES_REPAIR=...])
 	@echo "$(BOLD)$(CYAN)Generating repair fixtures...$(RESET)"

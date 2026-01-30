@@ -53,10 +53,10 @@ func TestRunValidate_Stdin(t *testing.T) {
 	defer func() { os.Stdin = oldStdin }()
 	os.Stdin = r
 
-		go func() {
-			_, _ = w.Write([]byte("dummy content"))
-			_ = w.Close()
-		}()
+	go func() {
+		_, _ = w.Write([]byte("dummy content"))
+		_ = w.Close()
+	}()
 
 	ctx := context.Background()
 	flags := &validateFlags{fileType: "epub"}

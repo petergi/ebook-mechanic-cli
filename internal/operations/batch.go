@@ -352,6 +352,24 @@ type BatchResult struct {
 	RepairsAttempted int           // Number of repair attempts (for repair operations)
 	RepairsSucceeded int           // Number of successful repairs (for repair operations)
 	RepairsNoOp      int           // Number of successful no-op repairs (no actions applied)
+
+	// Post-processing cleanup tracking
+	RemovedFiles []string // Files removed during cleanup (system errors)
+	MovedFiles   []string // Files moved to INVALID during cleanup (failed repairs)
+
+	// Operation configuration
+	Options BatchOptions // Settings used for this batch operation
+}
+
+// BatchOptions captures the operation settings for reporting
+type BatchOptions struct {
+	NumWorkers         int
+	SkipValidation     bool
+	NoBackup           bool
+	Aggressive         bool
+	RemoveSystemErrors bool
+	MoveFailedRepairs  bool
+	CleanupEmptyDirs   bool
 }
 
 // AggregateResults aggregates a list of results into a BatchResult

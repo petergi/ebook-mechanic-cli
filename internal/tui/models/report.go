@@ -3,7 +3,9 @@ package models
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -31,8 +33,10 @@ type ReportModel struct {
 	selectedFilter  int    // 0: all, 1: errors, 2: warnings, 3: info
 	savedReportPath string // Path where report was saved
 	saveError       error  // Error from last save attempt
-	saveStatusToken int
 	saveStatusShow  bool
+	openAfterSave   bool  // If true, open the report right after saving
+	openError       error // Error from last open attempt
+	openStatusShow  bool  // Whether to show open status/error
 }
 
 // NewReportModel creates a new report model for validation results
@@ -220,6 +224,26 @@ func (m ReportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return ReportSaveMsg{Path: path}
 			}
 
+		case "o":
+			// Open report: if not yet saved, save first then open
+			if m.savedReportPath != "" {
+				path := m.savedReportPath
+				return m, func() tea.Msg {
+					if err := openReport(path); err != nil {
+						return ReportOpenMsg{Path: path, Error: err}
+					}
+					return ReportOpenMsg{Path: path}
+				}
+			}
+			m.openAfterSave = true
+			return m, func() tea.Msg {
+				path, err := m.saveReport()
+				if err != nil {
+					return ReportSaveMsg{Error: err}
+				}
+				return ReportSaveMsg{Path: path}
+			}
+
 		case "enter", "esc":
 			// Return to menu
 			return m, func() tea.Msg {
@@ -239,17 +263,30 @@ func (m ReportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.savedReportPath = msg.Path
 			m.saveError = nil // Clear any previous error
 		}
-		m.saveStatusToken++
-		token := m.saveStatusToken
+		// Keep the save status visible until the user leaves the view
+		// or triggers another action. Do not auto-hide after a timeout.
 		m.saveStatusShow = true
-		return m, tea.Tick(3*time.Second, func(time.Time) tea.Msg {
-			return ReportSaveTimeoutMsg{Token: token}
-		})
+		// If we were asked to open after saving, trigger open now.
+		if m.openAfterSave && m.savedReportPath != "" {
+			m.openAfterSave = false
+			path := m.savedReportPath
+			return m, func() tea.Msg {
+				if err := openReport(path); err != nil {
+					return ReportOpenMsg{Path: path, Error: err}
+				}
+				return ReportOpenMsg{Path: path}
+			}
+		}
+		return m, nil
 
 	case ReportSaveTimeoutMsg:
-		if msg.Token == m.saveStatusToken {
-			m.saveStatusShow = false
-		}
+		// Auto-hide disabled: ignore timeout messages to keep the link visible
+		return m, nil
+
+	case ReportOpenMsg:
+		// Show open errors (if any); otherwise we keep UI as-is
+		m.openError = msg.Error
+		m.openStatusShow = msg.Error != nil
 		return m, nil
 	}
 
@@ -354,11 +391,13 @@ func (m ReportModel) renderValidationReport() string {
 		Render(
 			styles.RenderKeyBinding("1-4", "filter") + "  " +
 				styles.RenderKeyBinding("↑/↓", "scroll") + "  " +
-				styles.RenderKeyBinding("s", "save report") + "  " +
+				styles.RenderKeyBinding("s", "save") + "  " +
+				styles.RenderKeyBinding("o", "open") + "  " +
 				styles.RenderKeyBinding("enter", "continue"),
 		)
 
 	saveStatusLine := m.renderSaveStatusLine()
+	openStatusLine := m.renderOpenStatusLine()
 
 	// Combine all parts
 	var parts []string
@@ -369,6 +408,9 @@ func (m ReportModel) renderValidationReport() string {
 	parts = append(parts, "", statusBox, "", summaryBox, filters, issuesBox)
 	if saveStatusLine != "" {
 		parts = append(parts, "", saveStatusLine)
+	}
+	if openStatusLine != "" {
+		parts = append(parts, "", openStatusLine)
 	}
 	parts = append(parts, helpBox)
 
@@ -510,11 +552,13 @@ func (m ReportModel) renderRepairReport() string {
 		Padding(1, 2).
 		Width(m.width - 8).
 		Render(
-			styles.RenderKeyBinding("s", "save report") + "  " +
+			styles.RenderKeyBinding("s", "save") + "  " +
+				styles.RenderKeyBinding("o", "open") + "  " +
 				styles.RenderKeyBinding("enter", "continue"),
 		)
 
 	saveStatusLine := m.renderSaveStatusLine()
+	openStatusLine := m.renderOpenStatusLine()
 
 	// Combine all parts
 	var parts []string
@@ -525,6 +569,9 @@ func (m ReportModel) renderRepairReport() string {
 	parts = append(parts, "", detailsBox)
 	if saveStatusLine != "" {
 		parts = append(parts, "", saveStatusLine)
+	}
+	if openStatusLine != "" {
+		parts = append(parts, "", openStatusLine)
 	}
 	parts = append(parts, "", helpBox)
 
@@ -629,6 +676,13 @@ func (m ReportModel) renderBatchReport() string {
 			{"System Errors", fmt.Sprintf("%d", len(m.batchResult.Errored))},
 			{"Duration", m.batchResult.Duration.Round(time.Millisecond).String()},
 		}
+		// Add cleanup metrics if present
+		if len(m.batchResult.RemovedFiles) > 0 {
+			rows = append(rows, []string{"Files Removed", fmt.Sprintf("%d", len(m.batchResult.RemovedFiles))})
+		}
+		if len(m.batchResult.MovedFiles) > 0 {
+			rows = append(rows, []string{"Files Moved to INVALID", fmt.Sprintf("%d", len(m.batchResult.MovedFiles))})
+		}
 	} else {
 		// Validation operation - show validation metrics
 		rows = [][]string{
@@ -637,6 +691,10 @@ func (m ReportModel) renderBatchReport() string {
 			{"Invalid", fmt.Sprintf("%d", len(m.batchResult.Invalid))},
 			{"System Errors", fmt.Sprintf("%d", len(m.batchResult.Errored))},
 			{"Duration", m.batchResult.Duration.Round(time.Millisecond).String()},
+		}
+		// Add cleanup metric if present (validation can also remove system errors)
+		if len(m.batchResult.RemovedFiles) > 0 {
+			rows = append(rows, []string{"Files Removed", fmt.Sprintf("%d", len(m.batchResult.RemovedFiles))})
 		}
 	}
 	summaryContent := styles.RenderTable(headers, rows)
@@ -728,11 +786,13 @@ func (m ReportModel) renderBatchReport() string {
 		Render(
 			styles.RenderKeyBinding("1-4", "filter") + "  " +
 				styles.RenderKeyBinding("↑/↓", "scroll") + "  " +
-				styles.RenderKeyBinding("s", "save report") + "  " +
+				styles.RenderKeyBinding("s", "save") + "  " +
+				styles.RenderKeyBinding("o", "open") + "  " +
 				styles.RenderKeyBinding("enter", "continue"),
 		)
 
 	saveStatusLine := m.renderSaveStatusLine()
+	openStatusLine := m.renderOpenStatusLine()
 
 	// Combine all parts
 	var parts []string
@@ -743,6 +803,9 @@ func (m ReportModel) renderBatchReport() string {
 	parts = append(parts, "", statusBox, "", summaryBox, filters, listBox)
 	if saveStatusLine != "" {
 		parts = append(parts, "", saveStatusLine)
+	}
+	if openStatusLine != "" {
+		parts = append(parts, "", openStatusLine)
 	}
 	parts = append(parts, helpBox)
 
@@ -973,6 +1036,13 @@ func (m ReportModel) renderSaveStatusLine() string {
 	return ""
 }
 
+func (m ReportModel) renderOpenStatusLine() string {
+	if m.openStatusShow && m.openError != nil {
+		return styles.ErrorStyle.Render(fmt.Sprintf("%s Error opening report: %v", styles.IconCross, m.openError))
+	}
+	return ""
+}
+
 func (m ReportModel) renderRepairValidationBox() string {
 	if m.repairReport == nil {
 		return ""
@@ -1025,7 +1095,8 @@ func (m ReportModel) saveReport() (string, error) {
 		filename = fmt.Sprintf("repair-%s.txt", timestamp)
 		// Basic text formatting for repair
 		var b strings.Builder
-		b.WriteString("=== Repair Report ===\n\n")
+		b.WriteString("=== Repair Report ===\n")
+		b.WriteString(fmt.Sprintf("Generated: %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
 		if m.repairResult.Success {
 			b.WriteString("Status: Success\n")
 		} else {
@@ -1047,7 +1118,19 @@ func (m ReportModel) saveReport() (string, error) {
 		var b strings.Builder
 
 		if m.batchResult.Operation == "repair" {
-			b.WriteString("=== Batch Repair Report ===\n\n")
+			b.WriteString("=== Batch Repair Report ===\n")
+			b.WriteString(fmt.Sprintf("Generated: %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
+
+			// Options section
+			b.WriteString("Options:\n")
+			b.WriteString(fmt.Sprintf("  Workers: %d\n", m.batchResult.Options.NumWorkers))
+			b.WriteString(fmt.Sprintf("  Skip Post-Repair Validation: %v\n", m.batchResult.Options.SkipValidation))
+			b.WriteString(fmt.Sprintf("  No Backup: %v\n", m.batchResult.Options.NoBackup))
+			b.WriteString(fmt.Sprintf("  Aggressive Mode: %v\n", m.batchResult.Options.Aggressive))
+			b.WriteString(fmt.Sprintf("  Remove System Errors: %v\n", m.batchResult.Options.RemoveSystemErrors))
+			b.WriteString(fmt.Sprintf("  Move Failed Repairs: %v\n", m.batchResult.Options.MoveFailedRepairs))
+			b.WriteString(fmt.Sprintf("  Cleanup Empty Directories: %v\n\n", m.batchResult.Options.CleanupEmptyDirs))
+
 			b.WriteString(fmt.Sprintf("Total Files: %d\n", m.batchResult.Total))
 			b.WriteString(fmt.Sprintf("Repairs Attempted: %d\n", m.batchResult.RepairsAttempted))
 			b.WriteString(fmt.Sprintf("Repairs Succeeded: %d\n", m.batchResult.RepairsSucceeded))
@@ -1056,7 +1139,14 @@ func (m ReportModel) saveReport() (string, error) {
 			b.WriteString(fmt.Sprintf("System Errors: %d\n", len(m.batchResult.Errored)))
 			b.WriteString(fmt.Sprintf("Duration: %v\n\n", m.batchResult.Duration))
 		} else {
-			b.WriteString("=== Batch Validation Report ===\n\n")
+			b.WriteString("=== Batch Validation Report ===\n")
+			b.WriteString(fmt.Sprintf("Generated: %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
+
+			// Options section
+			b.WriteString("Options:\n")
+			b.WriteString(fmt.Sprintf("  Workers: %d\n", m.batchResult.Options.NumWorkers))
+			b.WriteString(fmt.Sprintf("  Remove System Errors: %v\n\n", m.batchResult.Options.RemoveSystemErrors))
+
 			b.WriteString(fmt.Sprintf("Total Files: %d\n", m.batchResult.Total))
 			b.WriteString(fmt.Sprintf("Valid: %d\n", len(m.batchResult.Valid)))
 			b.WriteString(fmt.Sprintf("Invalid: %d\n", len(m.batchResult.Invalid)))
@@ -1092,6 +1182,24 @@ func (m ReportModel) saveReport() (string, error) {
 			for _, r := range m.batchResult.Valid {
 				b.WriteString(fmt.Sprintf("- %s\n", filepath.Base(r.FilePath)))
 			}
+			b.WriteString("\n")
+		}
+
+		// Post-processing cleanup sections
+		if len(m.batchResult.RemovedFiles) > 0 {
+			b.WriteString("Files Removed (System Errors):\n")
+			for _, path := range m.batchResult.RemovedFiles {
+				b.WriteString(fmt.Sprintf("- %s\n", filepath.Base(path)))
+			}
+			b.WriteString("\n")
+		}
+
+		if len(m.batchResult.MovedFiles) > 0 {
+			b.WriteString("Files Moved to INVALID:\n")
+			for _, path := range m.batchResult.MovedFiles {
+				b.WriteString(fmt.Sprintf("- %s\n", filepath.Base(path)))
+			}
+			b.WriteString("\n")
 		}
 		content = b.String()
 	default:
@@ -1099,7 +1207,8 @@ func (m ReportModel) saveReport() (string, error) {
 		// We can reuse the CLI TextFormatter logic if we want,
 		// but for now simple text output
 		var b strings.Builder
-		b.WriteString("=== Validation Report ===\n\n")
+		b.WriteString("=== Validation Report ===\n")
+		b.WriteString(fmt.Sprintf("Generated: %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
 		b.WriteString(fmt.Sprintf("File: %s\n", m.report.FilePath))
 		b.WriteString(fmt.Sprintf("Status: %v\n\n", m.report.IsValid))
 		b.WriteString("Summary:\n")
@@ -1138,4 +1247,21 @@ type ReportSaveMsg struct {
 // ReportSaveTimeoutMsg hides save status after a delay.
 type ReportSaveTimeoutMsg struct {
 	Token int
+}
+
+// ReportOpenMsg is sent when attempting to open a report file
+type ReportOpenMsg struct {
+	Path  string
+	Error error
+}
+
+func openReport(path string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", path).Start()
+	case "windows":
+		return exec.Command("cmd", "/c", "start", "", path).Start()
+	default: // linux and others
+		return exec.Command("xdg-open", path).Start()
+	}
 }

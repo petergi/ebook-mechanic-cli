@@ -16,25 +16,31 @@ const (
 
 // SettingsModel manages TUI settings.
 type SettingsModel struct {
-	jobs           int
-	skipValidation bool
-	noBackup       bool
-	aggressive     bool
-	selected       int
-	width          int
-	height         int
+	jobs               int
+	skipValidation     bool
+	noBackup           bool
+	aggressive         bool
+	removeSystemErrors bool
+	moveFailedRepairs  bool
+	cleanupEmptyDirs   bool
+	selected           int
+	width              int
+	height             int
 }
 
 // SettingsSaveMsg is sent when settings are saved.
 type SettingsSaveMsg struct {
-	Jobs           int
-	SkipValidation bool
-	NoBackup       bool
-	Aggressive     bool
+	Jobs               int
+	SkipValidation     bool
+	NoBackup           bool
+	Aggressive         bool
+	RemoveSystemErrors bool
+	MoveFailedRepairs  bool
+	CleanupEmptyDirs   bool
 }
 
 // NewSettingsModel creates a new settings model.
-func NewSettingsModel(jobs int, skipValidation bool, noBackup bool, aggressive bool, width, height int) SettingsModel {
+func NewSettingsModel(jobs int, skipValidation bool, noBackup bool, aggressive bool, removeSystemErrors bool, moveFailedRepairs bool, cleanupEmptyDirs bool, width, height int) SettingsModel {
 	if width == 0 {
 		width = 80
 	}
@@ -49,13 +55,16 @@ func NewSettingsModel(jobs int, skipValidation bool, noBackup bool, aggressive b
 	}
 
 	return SettingsModel{
-		jobs:           jobs,
-		skipValidation: skipValidation,
-		noBackup:       noBackup,
-		aggressive:     aggressive,
-		selected:       0,
-		width:          width,
-		height:         height,
+		jobs:               jobs,
+		skipValidation:     skipValidation,
+		noBackup:           noBackup,
+		aggressive:         aggressive,
+		removeSystemErrors: removeSystemErrors,
+		moveFailedRepairs:  moveFailedRepairs,
+		cleanupEmptyDirs:   cleanupEmptyDirs,
+		selected:           0,
+		width:              width,
+		height:             height,
 	}
 }
 
@@ -78,11 +87,11 @@ func (m SettingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "up", "k":
 			m.selected--
 			if m.selected < 0 {
-				m.selected = 4
+				m.selected = 7
 			}
 		case "down", "j":
 			m.selected++
-			if m.selected > 4 {
+			if m.selected > 7 {
 				m.selected = 0
 			}
 		case "left", "h", "-", "_", "kp-":
@@ -107,18 +116,23 @@ func (m SettingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.noBackup = !m.noBackup
 			case 3:
 				m.aggressive = !m.aggressive
+			case 4:
+				m.removeSystemErrors = !m.removeSystemErrors
+			case 5:
+				m.moveFailedRepairs = !m.moveFailedRepairs
+			case 6:
+				m.cleanupEmptyDirs = !m.cleanupEmptyDirs
 			}
 		case "enter":
-			switch m.selected {
-			case 1:
-				m.skipValidation = !m.skipValidation
-			case 2:
-				m.noBackup = !m.noBackup
-			case 3:
-				m.aggressive = !m.aggressive
-			case 4:
-				return m, func() tea.Msg {
-					return SettingsSaveMsg{Jobs: m.jobs, SkipValidation: m.skipValidation, NoBackup: m.noBackup, Aggressive: m.aggressive}
+			return m, func() tea.Msg {
+				return SettingsSaveMsg{
+					Jobs:               m.jobs,
+					SkipValidation:     m.skipValidation,
+					NoBackup:           m.noBackup,
+					Aggressive:         m.aggressive,
+					RemoveSystemErrors: m.removeSystemErrors,
+					MoveFailedRepairs:  m.moveFailedRepairs,
+					CleanupEmptyDirs:   m.cleanupEmptyDirs,
 				}
 			}
 		case "esc", "q":
@@ -134,15 +148,18 @@ func (m SettingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View renders the settings.
 func (m SettingsModel) View() string {
 	title := styles.RenderTitle("⚙ Settings")
-	subtitle := styles.RenderSubtitle("Adjust batch jobs and validation")
+	subtitle := styles.RenderSubtitle("Adjust batch jobs and options")
 
 	jobsLabel := fmt.Sprintf("Batch jobs: %d", m.jobs)
 	validationLabel := fmt.Sprintf("Skip post-repair validation: %v", m.skipValidation)
 	backupLabel := fmt.Sprintf("No backup (in-place): %v", m.noBackup)
 	aggressiveLabel := fmt.Sprintf("Aggressive repair: %v", m.aggressive)
+	removeErrorsLabel := fmt.Sprintf("Remove system error books: %v", m.removeSystemErrors)
+	moveFailedLabel := fmt.Sprintf("Move failed repairs to INVALID: %v", m.moveFailedRepairs)
+	cleanupDirsLabel := fmt.Sprintf("Remove entire book directory: %v", m.cleanupEmptyDirs)
 	doneLabel := "Done"
 
-	items := []string{jobsLabel, validationLabel, backupLabel, aggressiveLabel, doneLabel}
+	items := []string{jobsLabel, validationLabel, backupLabel, aggressiveLabel, removeErrorsLabel, moveFailedLabel, cleanupDirsLabel, doneLabel}
 	var rendered string
 	for i, item := range items {
 		cursor := "  "
@@ -167,9 +184,8 @@ func (m SettingsModel) View() string {
 
 	helpText := styles.RenderKeyBinding("↑/↓", "navigate") + "  " +
 		styles.RenderKeyBinding("+/-", "change jobs") + "  " +
-		styles.RenderKeyBinding("←/→", "adjust jobs") + "  " +
 		styles.RenderKeyBinding("space", "toggle") + "  " +
-		styles.RenderKeyBinding("enter", "select") + "  " +
+		styles.RenderKeyBinding("enter", "save") + "  " +
 		styles.RenderKeyBinding("esc", "back")
 
 	helpBox := lipgloss.NewStyle().

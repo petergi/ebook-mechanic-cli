@@ -32,9 +32,20 @@ make uninstall-cli
 
 Open Settings from the main menu to adjust:
 
-- Batch job count for concurrent processing.
-- Skip post-repair validation to speed up repairs (default: validation enabled).
-- Aggressive repair mode (shows a warning when enabled).
+### Processing Options
+
+- **Batch job count**: Number of concurrent workers for batch processing (default: number of CPU cores).
+- **Skip post-repair validation**: Skip validation after repairs to speed up processing (default: validation enabled).
+- **No backup mode**: Repair files in-place without creating backups (default: backups enabled).
+- **Aggressive repair mode**: Enable aggressive repairs that may drop content or reorder sections (shows a warning when enabled).
+
+### Cleanup Options
+
+- **Remove system errors**: Automatically delete files with system-level errors (corrupt archives, permission issues, etc.).
+- **Move failed repairs**: Move unrepairable files to an `INVALID` subfolder for manual review.
+- **Cleanup empty directories**: Remove empty parent directories and Calibre metadata-only folders (directories containing only `cover.jpg`, `metadata.opf`, etc. with no ebook files) [default: enabled].
+
+These settings apply to batch operations and are recorded in batch reports.
 
 ## Validate
 
@@ -61,6 +72,20 @@ to make an EPUB or PDF valid.
 ## Reports
 
 Reports are rendered in the TUI with styled summaries and issue details.
+
+### Batch Reports
+
+Batch reports include:
+
+- **Options Section**: Shows all settings used for the batch operation (workers, validation, backup, cleanup options).
+- **Summary Statistics**: Total files processed, repairs attempted/succeeded/failed, system errors.
+- **File Lists**: Categorized lists of Invalid, Errored, and Valid files.
+- **Cleanup Actions**: Lists files removed (system errors) and moved (failed repairs).
+
+Batch reports can be saved from the TUI (`s` key) and are automatically saved to the `reports/` directory with timestamps.
+
+### Single File Reports
+
 Original backups use `*_original` when using the backup option (default).
 Choose "No backup (in-place)" to repair without creating a backup.
 

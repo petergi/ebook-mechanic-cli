@@ -1,7 +1,7 @@
 package models
 
 import (
-	"github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/petergi/ebook-mechanic-cli/internal/tui/styles"
 )
@@ -55,6 +55,11 @@ func NewMenuModel() MenuModel {
 				Label:       "Batch Repair Directory",
 				Description: "Repair all ebooks in a folder",
 				Action:      "batch-repair",
+			},
+			{
+				Label:       "Calibre Library Cleanup",
+				Description: "Find orphaned metadata and missing ebooks",
+				Action:      "calibre-cleanup",
 			},
 			{
 				Label:       "Settings",

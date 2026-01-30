@@ -101,6 +101,9 @@ func (m ProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case ProgressUpdateMsg:
+		if msg.Total > 0 {
+			m.total = msg.Total
+		}
 		m.current = msg.Current
 		m.currentFile = msg.CurrentFile
 		if m.total > 0 {

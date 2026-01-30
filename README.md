@@ -140,6 +140,8 @@ ebm batch validate ./library --max-depth 2 --ext .epub
 
 ### Batch Flags
 
+#### Common Options
+
 - `--jobs, -j`: Number of concurrent workers [default: num_cpu]
 - `--recursive, -r`: Process subdirectories recursively [default: true]
 - `--max-depth`: Maximum directory depth (-1 = unlimited)
@@ -147,6 +149,40 @@ ebm batch validate ./library --max-depth 2 --ext .epub
 - `--ignore`: Glob patterns to ignore
 - `--progress`: Progress output mode (`auto`, `simple`, `none`)
 - `--summary-only`: Only print summary output
+
+#### Repair-Specific Options
+
+- `--no-backup`: Skip backup before in-place repair
+- `--backup-dir`: Directory for backup files
+- `--aggressive`: Enable aggressive repairs (may drop content/structure)
+- `--skip-validation`: Skip post-repair validation for faster processing
+
+#### Cleanup Options (TUI and CLI)
+
+These options control automatic cleanup of problematic files and directories:
+
+- `--remove-system-errors`: Automatically remove files with system errors (IO errors, permission denied, corrupt zip, etc.)
+- `--move-failed-repairs`: Move unrepairable files to an `INVALID` subfolder
+- `--cleanup-empty-dirs`: Clean up empty parent directories and Calibre metadata-only folders (cover.jpg, metadata.opf with no ebooks) [default: true]
+
+#### Example: Batch Repair with Full Cleanup
+
+```bash
+# Repair a Calibre library with automatic cleanup
+ebm batch repair ~/Books/Calibre \
+  --remove-system-errors \
+  --move-failed-repairs \
+  --cleanup-empty-dirs \
+  --jobs 8
+```
+
+This will:
+
+1. Attempt to repair all EPUB/PDF files
+2. Remove files with system errors (corrupted archives, permission issues)
+3. Move files that can't be repaired to `INVALID` folder
+4. Clean up empty directories and Calibre metadata folders
+5. Record all actions in the batch report
 
 ## Development
 

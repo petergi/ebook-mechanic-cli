@@ -179,9 +179,17 @@ func TestAppUpdateBrowser_DelegatesToBrowserModel(t *testing.T) {
 func TestAppUpdateSettings_Save(t *testing.T) {
 	app := NewApp()
 	app.state = StateSettings
-	app.settingsModel = models.NewSettingsModel(2, true, true, true, 80, 24)
+	app.settingsModel = models.NewSettingsModel(2, true, true, true, false, false, true, 80, 24)
 
-	model, _ := app.Update(models.SettingsSaveMsg{Jobs: 6, SkipValidation: false, NoBackup: true, Aggressive: true})
+	model, _ := app.Update(models.SettingsSaveMsg{
+		Jobs:               6,
+		SkipValidation:     false,
+		NoBackup:           true,
+		Aggressive:         true,
+		RemoveSystemErrors: false,
+		MoveFailedRepairs:  false,
+		CleanupEmptyDirs:   true,
+	})
 	updated := model.(App)
 
 	if updated.state != StateMenu {
@@ -461,7 +469,7 @@ func TestCollectBatchFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	files, err := collectBatchFiles(tmpDir)
+	files, err := collectBatchFiles(tmpDir, nil)
 	if err != nil {
 		t.Fatalf("collectBatchFiles failed: %v", err)
 	}
